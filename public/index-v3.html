@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>히드라 땅따먹기 프로토타입</title>
+  <link rel="stylesheet" href="/public/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hud">
+      <div><strong>히드라 땅따먹기</strong> <span class="phase">COMBAT / CAPTURE MILESTONE</span></div>
+      <div class="stats">
+        <span>Zones <b id="ownedZoneCount">1</b>/<b id="zoneCount">21</b></span>
+        <span>Mineral <b id="mineralCount">1000</b></span>
+        <span>Kills <b id="killCount">0</b></span>
+        <span>Sunken <b id="sunkenKillCount">0</b></span>
+        <span>Hydra <b id="hydraCount">0</b></span>
+        <span>Selected <b id="selectionCount">1</b></span>
+      </div>
+    </header>
+
+    <section class="viewport-wrap">
+      <canvas id="game" aria-label="게임 전장"></canvas>
+      <div class="help">
+        <span>좌클릭/드래그: 아군 선택</span>
+        <span>우클릭: 이동 · 접전 시 자동 공격</span>
+        <span>오버로드 + 병력 우위: 자동 점령 (-250)</span>
+        <span>WASD/방향키/가장자리: 카메라</span>
+        <span>미니맵 클릭: 카메라 이동</span>
+      </div>
+    </section>
+
+    <section class="bottom-panel">
+      <div class="unit-card">
+        <div class="portrait">HY</div>
+        <div>
+          <div class="eyebrow">COMMAND GROUP</div>
+          <h2>Combat Group</h2>
+          <p id="unitStatus">접전 시 자동 공격 · 성큰 파괴 후 오버로드로 점령하세요.</p>
+        </div>
+      </div>
+      <div class="map-card">
+        <div class="eyebrow">STRATEGIC MAP</div>
+        <canvas id="minimap" width="240" height="120" aria-label="미니맵"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/public/game-v3.mjs"></script>

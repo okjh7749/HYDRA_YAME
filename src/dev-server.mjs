@@ -18,7 +18,7 @@ const mimeTypes = new Map([
 
 function resolveRequestPath(urlPath) {
   const decoded = decodeURIComponent(urlPath.split('?')[0]);
-  const requested = decoded === '/' ? '/public/index.html' : decoded;
+  const requested = decoded === '/' ? '/public/index-v3.html' : decoded;
   const relative = normalize(requested).replace(/^[/\\]+/, '');
   const resolved = normalize(join(root, relative));
   if (!resolved.startsWith(root)) return null;
