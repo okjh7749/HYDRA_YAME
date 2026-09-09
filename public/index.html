@@ -9,10 +9,12 @@
 <body>
   <main class="shell">
     <header class="hud">
-      <div><strong>히드라 땅따먹기</strong> <span class="phase">MAP / CAMERA MILESTONE</span></div>
+      <div><strong>히드라 땅따먹기</strong> <span class="phase">VISION / HYDRA RTS MILESTONE</span></div>
       <div class="stats">
         <span>Zones <b id="zoneCount">21</b></span>
         <span>Mineral <b>1000</b></span>
+        <span>Hydra <b id="hydraCount">0</b></span>
+        <span>Selected <b id="selectionCount">1</b></span>
         <span>Mode <b>Classic 3.0</b></span>
       </div>
     </header>
@@ -22,7 +24,8 @@
       <div class="help">
         <span>WASD / 방향키: 카메라</span>
         <span>화면 가장자리: 스크롤</span>
-        <span>우클릭: 오버로드 이동</span>
+        <span>좌클릭/드래그: 아군 선택</span>
+        <span>우클릭: 선택 유닛 이동</span>
         <span>미니맵 클릭: 카메라 이동</span>
       </div>
     </section>
@@ -32,8 +35,8 @@
         <div class="portrait">OV</div>
         <div>
           <div class="eyebrow">SELECTED UNIT</div>
-          <h2>Overlord Prototype</h2>
-          <p id="unitStatus">대기 중 · 이동 가능한 영역만 통과합니다.</p>
+          <h2>Command Group</h2>
+          <p id="unitStatus">Overlord × 1 · 우클릭으로 이동</p>
         </div>
       </div>
       <div class="map-card">
@@ -43,6 +46,6 @@
     </section>
   </main>
 
-  <script type="module" src="/public/game.mjs"></script>
+  <script type="module" src="/public/game-v2.mjs"></script>
 </body>
 </html>
