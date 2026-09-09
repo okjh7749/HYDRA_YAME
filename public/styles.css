@@ -1,0 +1,159 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #07090c;
+  color: #e9f0f2;
+}
+
+body {
+  margin: 0;
+  min-width: 960px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(36, 61, 68, 0.28), transparent 34rem),
+    #07090c;
+}
+
+.shell {
+  width: min(1400px, 100%);
+  margin: 0 auto;
+  padding: 14px;
+}
+
+.hud {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 16px;
+  border: 1px solid #2c4348;
+  border-bottom: 0;
+  background: linear-gradient(180deg, #18262a, #0d1417);
+}
+
+.hud strong {
+  color: #e8f6df;
+  letter-spacing: 0.02em;
+}
+
+.phase,
+.eyebrow {
+  color: #7eb9b7;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+.stats {
+  display: flex;
+  gap: 22px;
+  font-size: 13px;
+  color: #9fafb4;
+}
+
+.stats b {
+  color: #d9ff8d;
+  margin-left: 5px;
+}
+
+.viewport-wrap {
+  position: relative;
+  height: min(68vh, 760px);
+  min-height: 520px;
+  overflow: hidden;
+  border: 1px solid #2c4348;
+  background: #000;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.help {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.help span {
+  padding: 5px 8px;
+  border: 1px solid rgba(140, 190, 190, 0.26);
+  border-radius: 3px;
+  background: rgba(3, 10, 12, 0.76);
+  color: #b7c9ca;
+  font-size: 11px;
+}
+
+.bottom-panel {
+  display: grid;
+  grid-template-columns: 1fr 272px;
+  gap: 12px;
+  min-height: 168px;
+  padding: 12px;
+  border: 1px solid #2c4348;
+  border-top: 0;
+  background: linear-gradient(180deg, #10181c, #090d0f);
+}
+
+.unit-card,
+.map-card {
+  border: 1px solid #26373c;
+  background: rgba(10, 17, 20, 0.92);
+}
+
+.unit-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px;
+}
+
+.portrait {
+  display: grid;
+  place-items: center;
+  width: 92px;
+  height: 92px;
+  border: 2px solid #6ce486;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #4a2140 0 22%, #281733 23% 44%, #0b1014 45%);
+  color: #d9ff8d;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.unit-card h2 {
+  margin: 5px 0 6px;
+  font-size: 20px;
+}
+
+.unit-card p {
+  margin: 0;
+  color: #9fb1b5;
+  font-size: 13px;
+}
+
+.map-card {
+  padding: 10px 14px 14px;
+}
+
+#minimap {
+  display: block;
+  width: 240px;
+  height: 120px;
+  margin-top: 8px;
+  border: 1px solid #43565b;
+  background: #000;
+  image-rendering: pixelated;
+}

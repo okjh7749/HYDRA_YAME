@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>히드라 땅따먹기 프로토타입</title>
+  <link rel="stylesheet" href="/public/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hud">
+      <div><strong>히드라 땅따먹기</strong> <span class="phase">MAP / CAMERA MILESTONE</span></div>
+      <div class="stats">
+        <span>Zones <b id="zoneCount">21</b></span>
+        <span>Mineral <b>1000</b></span>
+        <span>Mode <b>Classic 3.0</b></span>
+      </div>
+    </header>
+
+    <section class="viewport-wrap">
+      <canvas id="game" aria-label="게임 전장"></canvas>
+      <div class="help">
+        <span>WASD / 방향키: 카메라</span>
+        <span>화면 가장자리: 스크롤</span>
+        <span>우클릭: 오버로드 이동</span>
+        <span>미니맵 클릭: 카메라 이동</span>
+      </div>
+    </section>
+
+    <section class="bottom-panel">
+      <div class="unit-card">
+        <div class="portrait">OV</div>
+        <div>
+          <div class="eyebrow">SELECTED UNIT</div>
+          <h2>Overlord Prototype</h2>
+          <p id="unitStatus">대기 중 · 이동 가능한 영역만 통과합니다.</p>
+        </div>
+      </div>
+      <div class="map-card">
+        <div class="eyebrow">STRATEGIC MAP</div>
+        <canvas id="minimap" width="240" height="120" aria-label="미니맵"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/public/game.mjs"></script>
+</body>
+</html>
