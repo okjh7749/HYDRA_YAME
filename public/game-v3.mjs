@@ -808,3 +808,246 @@ resizeCanvas();
 updateHud();
 render(true);
 requestAnimationFrame(frame);
+// selection combat readability milestone
+import {
+  inspectSelectedUnits,
+  inspectSunken,
+  nearestSelectableSunken,
+} from '/src/game-inspection.mjs';
+import {
+  drawAttackFlash,
+  drawEnhancedCombatEffects,
+  drawRangeCircle,
+  drawTargetReticle,
+  renderDetailRows,
+} from '/public/combat-readability.mjs';
+const selectionDetailsNode = document.querySelector('#selectionDetails');
+let selectedSunkenZoneId = null;
+
+function teamLabel(team) {
+  return team === LOCAL_TEAM ? 'Player 1' : `Team ${team + 1}`;
+}
+
+function selectedSunkenZone() {
+  if (selectedSunkenZoneId === null) return null;
+  const zone = map.zones.find((candidate) => candidate.id === selectedSunkenZoneId) ?? null;
+  if (!zone || zone.ownerTeam === null || zone.sunkenHp <= 0) {
+    selectedSunkenZoneId = null;
+    return null;
+  }
+  return zone;
+}
+
+function describeTarget(target) {
+  if (!target) return '없음';
+  if (target.kind === 'sunken') return `Sunken · Zone ${target.zoneId}`;
+  if (target.kind === 'unit') {
+    const unit = simulation.units.find((candidate) => candidate.id === target.id);
+    return unit ? `${unit.type} #${unit.id}` : `Unit #${target.id}`;
+  }
+  return '없음';
+}
+
+function unitDetailRows(info) {
+  if (!info) return [];
+  const typeSummary = [
+    info.counts.hydra ? `Hydra ${info.counts.hydra}` : '',
+    info.counts.overlord ? `Overlord ${info.counts.overlord}` : '',
+    info.counts.zealot ? `Zealot ${info.counts.zealot}` : '',
+  ].filter(Boolean).join(' / ');
+
+  return [
+    ['Units', typeSummary || info.type],
+    ['HP', `${Math.ceil(info.hp)} / ${Math.ceil(info.maxHp)}`],
+    ['Attack', info.attack === null ? '-' : info.attack],
+    ['Defense', info.defense === null ? (info.armor ?? '-') : info.defense],
+    ['Range', info.range === null ? '-' : `${info.range}px`],
+    ['Kills', info.kills],
+    ['Order', info.order],
+    ['Target', describeTarget(info.target)],
+  ];
+}
+
+function sunkenDetailRows(zone) {
+  const info = inspectSunken(zone);
+  const accumulator = simulation.spawnAccumulators.get(zone.id) ?? 0;
+  const production = Math.min(100, Math.round((accumulator / info.productionIntervalMs) * 100));
+  const latestShot = [...simulation.effects].reverse().find(
+    (effect) => effect.type === 'sunken-shot'
+      && Math.hypot(effect.x1 - zone.x, effect.y1 - (zone.y + 27)) < 4,
+  );
+  return [
+    ['Owner', teamLabel(info.team)],
+    ['HP', `${Math.ceil(info.hp)} / ${info.maxHp}`],
+    ['Attack', info.attack],
+    ['Armor', info.armor],
+    ['Range', `${info.range}px`],
+    ['Production', `${production}% · 0.5s`],
+    ['Zone', `Zone ${info.zoneId}`],
+    ['Target', latestShot?.targetId ? `Unit #${latestShot.targetId}` : '없음'],
+  ];
+}
+
+function buildingDetailRows(building) {
+  const player = getPlayerState(simulation, building.team);
+  return [
+    ['Owner', teamLabel(building.team)],
+    ['HP', `${Math.ceil(building.hp)} / ${building.maxHp}`],
+    ['Type', building.label],
+    ['Attack Up', `+${player?.upgrades.attack ?? 0}`],
+    ['Defense Up', `+${player?.upgrades.defense ?? 0}`],
+    ['Range Up', player?.upgrades.range ? '완료' : '기본'],
+    ['Speed Up', player?.upgrades.speed ? '완료' : '기본'],
+    ['Status', building.hp > 0 ? 'Operational' : 'Destroyed'],
+  ];
+}
+
+function updateReadabilitySelectionUi() {
+  const sunken = selectedSunkenZone();
+  const building = getUpgradeBuilding(simulation, selectedBuildingId);
+
+  if (sunken) {
+    selectedIds.clear();
+    selectedBuildingId = null;
+    selectionCountNode.textContent = '1';
+    portraitLabelNode.textContent = 'SK';
+    selectionTitleNode.textContent = `Sunken Colony · Zone ${sunken.id}`;
+    upgradePanelNode.hidden = true;
+    renderDetailRows(selectionDetailsNode, sunkenDetailRows(sunken));
+    if (transientStatusMs <= 0) {
+      const cycle = simulation.spawnAccumulators.get(sunken.id) ?? 0;
+      const cyclePercent = Math.min(100, Math.round((cycle / 500) * 100));
+      statusNode.textContent = `성큰 HP ${Math.ceil(sunken.sunkenHp)} · 생산 주기 ${cyclePercent}% · 공격 범위 176px`;
+    }
+    return;
+  }
+
+  if (building) {
+    renderDetailRows(selectionDetailsNode, buildingDetailRows(building));
+    return;
+  }
+
+  const info = inspectSelectedUnits(simulation, LOCAL_TEAM, selectedIds);
+  if (!info) {
+    renderDetailRows(selectionDetailsNode, []);
+    return;
+  }
+
+  renderDetailRows(selectionDetailsNode, unitDetailRows(info));
+  if (info.type === 'hydra') {
+    portraitLabelNode.textContent = 'HY';
+    selectionTitleNode.textContent = info.count === 1 ? 'Hydralisk' : `Hydralisk Group × ${info.count}`;
+  } else if (info.type === 'overlord') {
+    portraitLabelNode.textContent = 'OV';
+    selectionTitleNode.textContent = 'Overlord';
+  } else if (info.type === 'zealot') {
+    portraitLabelNode.textContent = 'ZL';
+    selectionTitleNode.textContent = 'Beacon Zealot';
+  } else {
+    portraitLabelNode.textContent = 'GR';
+    selectionTitleNode.textContent = `Mixed Group × ${info.count}`;
+  }
+}
+
+function targetWorldPoint(target) {
+  if (!target) return null;
+  if (target.kind === 'unit') {
+    const unit = simulation.units.find((candidate) => candidate.id === target.id && candidate.hp > 0);
+    if (!unit || !unitIsVisible(unit)) return null;
+    return { x: unit.x, y: unit.y, label: `${unit.type.toUpperCase()} #${unit.id}` };
+  }
+  if (target.kind === 'sunken') {
+    const zone = map.zones.find((candidate) => candidate.id === target.zoneId);
+    if (!zone || zone.sunkenHp <= 0 || !pointVisible(zone.x, zone.y)) return null;
+    return { x: zone.x, y: zone.y + 27, label: `SUNKEN Z${zone.id}` };
+  }
+  return null;
+}
+
+function drawReadabilityOverlay() {
+  const info = inspectSelectedUnits(simulation, LOCAL_TEAM, selectedIds);
+  if (info?.unit?.type === 'hydra') {
+    drawRangeCircle(ctx, camera, info.unit.x, info.unit.y, info.range);
+    const target = targetWorldPoint(info.target);
+    if (target) drawTargetReticle(ctx, camera, target.x, target.y, target.label);
+  }
+
+  const sunken = selectedSunkenZone();
+  if (sunken && (sunken.ownerTeam === LOCAL_TEAM || pointVisible(sunken.x, sunken.y))) {
+    const x = sunken.x - camera.x;
+    const y = sunken.y + 27 - camera.y;
+    ctx.save();
+    ctx.strokeStyle = '#7cff91';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, 25, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    drawRangeCircle(ctx, camera, sunken.x, sunken.y + 27, 176, '#ffb36d');
+
+    const latestShot = [...simulation.effects].reverse().find(
+      (effect) => effect.type === 'sunken-shot'
+        && Math.hypot(effect.x1 - sunken.x, effect.y1 - (sunken.y + 27)) < 4,
+    );
+    if (latestShot?.targetId) {
+      const target = simulation.units.find((unit) => unit.id === latestShot.targetId && unit.hp > 0);
+      if (target && unitIsVisible(target)) {
+        drawTargetReticle(ctx, camera, target.x, target.y, `UNIT #${target.id}`);
+      }
+    }
+  }
+
+  for (const unit of simulation.units) {
+    if (unit.type !== 'hydra' || !unitIsVisible(unit) || !visibleWorldPoint(unit.x, unit.y, 30)) continue;
+    drawAttackFlash(ctx, camera, unit);
+  }
+  drawEnhancedCombatEffects(ctx, camera, simulation.effects, pointVisible);
+}
+
+let readabilityPointerDown = null;
+
+gameCanvas.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0) return;
+  const rect = gameCanvas.getBoundingClientRect();
+  readabilityPointerDown = {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  };
+});
+
+gameCanvas.addEventListener('pointerup', (event) => {
+  if (event.button !== 0 || !readabilityPointerDown) return;
+  const rect = gameCanvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  const distance = Math.hypot(x - readabilityPointerDown.x, y - readabilityPointerDown.y);
+  readabilityPointerDown = null;
+
+  if (distance >= 6) {
+    selectedSunkenZoneId = null;
+    return;
+  }
+
+  const world = screenToWorld(x, y);
+  const zone = nearestSelectableSunken(map, world, 24);
+  const visible = zone && (zone.ownerTeam === LOCAL_TEAM || pointVisible(zone.x, zone.y));
+  if (!visible) {
+    selectedSunkenZoneId = null;
+    return;
+  }
+
+  selectedSunkenZoneId = zone.id;
+  selectedIds.clear();
+  selectedBuildingId = null;
+  transientStatus = `Sunken Colony · Zone ${zone.id} 선택`;
+  transientStatusMs = 900;
+  updateReadabilitySelectionUi();
+});
+
+function readabilityFrame() {
+  updateReadabilitySelectionUi();
+  drawReadabilityOverlay();
+  requestAnimationFrame(readabilityFrame);
+}
+
+requestAnimationFrame(readabilityFrame);
