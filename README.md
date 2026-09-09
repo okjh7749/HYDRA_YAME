@@ -4,7 +4,7 @@ Development through a private Web ChatGPT Git writer connection uses isolated
 worktrees, chatgpt/* branches, pull requests, required checks, and squash merges.
 Direct main pushes are prohibited after the authorized initial bootstrap.
 
-This repository now contains the first playable browser milestone for a
+This repository now contains a playable browser milestone for a
 StarCraft custom-map-inspired Hydra territory game.
 
 ## Current milestone
@@ -13,8 +13,13 @@ StarCraft custom-map-inspired Hydra territory game.
 - 21 strategic capture zones with four team starting zones
 - real unwalkable void terrain and narrow connecting corridors
 - camera movement with WASD, arrow keys and edge scrolling
-- clickable strategic minimap with a live camera rectangle
-- controllable Overlord prototype with right-click pathfinding
+- real-time circular vision from friendly units and owned sunkens
+- enemy units and minimap information hidden outside current vision
+- every owned sunken produces one Hydra every 0.5 seconds
+- classic local production cap of 80 Hydras around each zone
+- click/drag unit selection with group formation movement
+- clickable strategic minimap with a live camera rectangle and unit dots
+- controllable Overlord and Hydras with right-click pathfinding
 - invalid movement targets snap to the nearest valid tile
 - local static server implemented with Node.js standard library only
 
@@ -30,7 +35,8 @@ Then open `http://127.0.0.1:8080`.
 
 - `WASD` / arrow keys: move camera
 - move the pointer to the viewport edge: edge scroll
-- right click: move the selected Overlord prototype
+- left click or drag: select friendly units
+- right click: move the selected unit or group
 - click minimap: center the camera on that world position
 
 Writer code, credentials, service scripts and check configuration remain outside
