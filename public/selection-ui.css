@@ -1,0 +1,38 @@
+.selection-details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(105px, 1fr));
+  gap: 7px;
+  margin-top: 12px;
+  max-width: 720px;
+}
+
+.selection-detail {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(91, 124, 130, 0.34);
+  background: rgba(16, 28, 31, 0.72);
+}
+
+.selection-detail .label {
+  display: block;
+  margin-bottom: 2px;
+  color: #70898e;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.selection-detail .value {
+  display: block;
+  overflow: hidden;
+  color: #dbe9e7;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .selection-details {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+}

@@ -59,6 +59,9 @@ function createLocalOverlord(state, map) {
     pathIndex: 0,
     facing: 0,
     attackCooldownMs: 0,
+    attackFlashMs: 0,
+    currentTarget: null,
+    kills: 0,
   };
   state.nextUnitId += 1;
   state.units.push(unit);
@@ -87,9 +90,14 @@ export function initializeCombatState(state, map) {
   if (!state.effects) state.effects = [];
   for (const zone of map.zones) {
     if (zone.ownerTeam !== null && zone.sunkenHp === undefined) resetSunken(zone);
+    if (zone.sunkenAttackFlashMs === undefined) zone.sunkenAttackFlashMs = 0;
+    if (zone.currentTargetUnitId === undefined) zone.currentTargetUnitId = null;
   }
   for (const unit of state.units) {
     if (unit.attackCooldownMs === undefined) unit.attackCooldownMs = 0;
+    if (unit.attackFlashMs === undefined) unit.attackFlashMs = 0;
+    if (unit.currentTarget === undefined) unit.currentTarget = null;
+    if (unit.kills === undefined) unit.kills = 0;
     if (unit.type === 'hydra' && unit.armor === undefined) unit.armor = 0;
     if (unit.type === 'overlord' && unit.armor === undefined) unit.armor = OVERLORD_ARMOR;
   }
@@ -130,7 +138,13 @@ export function calculateHydraAttackRange(state, team) {
 }
 
 function pushEffect(state, effect) {
-  state.effects.push({ ...effect, ttlMs: effect.ttlMs ?? 240 });
+  const durationMs = effect.ttlMs ?? 240;
+  state.effects.push({
+    ...effect,
+    ttlMs: durationMs,
+    durationMs,
+    elapsedMs: 0,
+  });
 }
 
 function damageUnit(state, target, amount, attackerTeam, source) {
@@ -143,6 +157,7 @@ function damageUnit(state, target, amount, attackerTeam, source) {
     x2: target.x,
     y2: target.y,
     damage: amount,
+    targetId: target.id,
   });
   if (target.hp > 0) return false;
 
@@ -153,6 +168,7 @@ function damageUnit(state, target, amount, attackerTeam, source) {
       player.minerals += HYDRA_KILL_REWARD;
       player.kills += 1;
     }
+    if (source.type === 'hydra') source.kills = (source.kills ?? 0) + 1;
   }
   return true;
 }
@@ -214,7 +230,10 @@ function cleanupDeadUnits(state) {
 }
 
 function stepEffects(state, deltaMs) {
-  for (const effect of state.effects) effect.ttlMs -= deltaMs;
+  for (const effect of state.effects) {
+    effect.ttlMs -= deltaMs;
+    effect.elapsedMs = (effect.elapsedMs ?? 0) + deltaMs;
+  }
   state.effects = state.effects.filter((effect) => effect.ttlMs > 0);
 }
 
@@ -225,6 +244,7 @@ export function stepCombat(state, map, deltaMs) {
   for (const unit of state.units) {
     if (unit.hp <= 0) continue;
     unit.attackCooldownMs = Math.max(0, (unit.attackCooldownMs ?? 0) - deltaMs);
+    unit.attackFlashMs = Math.max(0, (unit.attackFlashMs ?? 0) - deltaMs);
     if (unit.type !== 'hydra' || unit.attackCooldownMs > 0) continue;
 
     const range = hydraAttackRange(state, unit.team);
@@ -235,16 +255,22 @@ export function stepCombat(state, map, deltaMs) {
         : (enemyUnit.armor ?? 0);
       const amount = hydraDamage(state, unit.team, armor);
       unit.facing = Math.atan2(enemyUnit.y - unit.y, enemyUnit.x - unit.x);
+      unit.currentTarget = { kind: 'unit', id: enemyUnit.id };
       damageUnit(state, enemyUnit, amount, unit.team, unit);
       unit.attackCooldownMs = HYDRA_ATTACK_COOLDOWN_MS;
+      unit.attackFlashMs = 140;
       continue;
     }
 
     const enemySunken = nearestEnemySunken(map, unit, range);
-    if (!enemySunken) continue;
+    if (!enemySunken) {
+      unit.currentTarget = null;
+      continue;
+    }
     const amount = hydraDamage(state, unit.team, enemySunken.sunkenArmor ?? SUNKEN_ARMOR);
     enemySunken.sunkenHp -= amount;
     unit.facing = Math.atan2(enemySunken.y - unit.y, enemySunken.x - unit.x);
+    unit.currentTarget = { kind: 'sunken', zoneId: enemySunken.id };
     pushEffect(state, {
       type: 'hydra-shot',
       x1: unit.x,
@@ -254,12 +280,14 @@ export function stepCombat(state, map, deltaMs) {
       damage: amount,
     });
     unit.attackCooldownMs = HYDRA_ATTACK_COOLDOWN_MS;
+    unit.attackFlashMs = 140;
     if (enemySunken.sunkenHp <= 0) destroySunken(state, enemySunken, unit.team);
   }
 
   for (const zone of map.zones) {
     if (zone.ownerTeam === null || zone.sunkenHp <= 0) continue;
     zone.sunkenAttackCooldownMs = Math.max(0, (zone.sunkenAttackCooldownMs ?? 0) - deltaMs);
+    zone.sunkenAttackFlashMs = Math.max(0, (zone.sunkenAttackFlashMs ?? 0) - deltaMs);
     if (zone.sunkenAttackCooldownMs > 0) continue;
     const attacker = { x: zone.x, y: zone.y, team: zone.ownerTeam };
     const target = nearestEnemyUnit(state, attacker, SUNKEN_ATTACK_RANGE);

@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>히드라 땅따먹기 프로토타입</title>
   <link rel="stylesheet" href="/public/styles.css">
+  <link rel="stylesheet" href="/public/selection-ui.css">
 </head>
 <body>
   <main class="shell">
     <header class="hud">
-      <div><strong>히드라 땅따먹기</strong> <span class="phase">BEACON / FORMATION MILESTONE</span></div>
+      <div><strong>히드라 땅따먹기</strong> <span class="phase">SELECTION / COMBAT READABILITY</span></div>
       <div class="stats">
         <span>Zones <b id="ownedZoneCount">1</b>/<b id="zoneCount">21</b></span>
         <span>Mineral <b id="mineralCount">1000</b></span>
@@ -40,6 +41,7 @@
           <div class="eyebrow">COMMAND GROUP</div>
           <h2 id="selectionTitle">Combat Group</h2>
           <p id="unitStatus">접전 시 자동 공격 · 성큰 파괴 후 오버로드로 점령하세요.</p>
+          <div class="selection-details" id="selectionDetails" aria-live="polite"></div>
           <div class="upgrade-panel" id="upgradePanel" hidden>
             <div class="upgrade-stats" id="upgradeStats"></div>
             <div class="upgrade-actions">
