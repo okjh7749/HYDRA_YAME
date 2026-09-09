@@ -18,6 +18,9 @@ StarCraft custom-map-inspired Hydra territory game.
 - every owned sunken produces one Hydra every 0.5 seconds
 - classic local production cap of 80 Hydras around each zone
 - click/drag unit selection with group formation movement
+- one selectable Beacon Zealot per team with eight directional trigger pads
+- Beacon triggers rally every friendly Hydra toward the mapped central battle zone
+- spatial-hash Hydra separation keeps large groups from stacking or entering void terrain
 - clickable strategic minimap with a live camera rectangle and unit dots
 - controllable Overlord and Hydras with right-click pathfinding
 - invalid movement targets snap to the nearest valid tile
