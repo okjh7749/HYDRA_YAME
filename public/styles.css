@@ -157,3 +157,62 @@ body {
   background: #000;
   image-rendering: pixelated;
 }
+
+.selection-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.upgrade-panel {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #26373c;
+}
+
+.upgrade-panel[hidden] {
+  display: none;
+}
+
+.upgrade-stats {
+  margin-bottom: 10px;
+  color: #b9c9cc;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.upgrade-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  gap: 8px;
+  max-width: 520px;
+}
+
+.upgrade-actions button {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #446167;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #1a3034, #102025);
+  color: #dce9e6;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.upgrade-actions button:hover:not(:disabled) {
+  border-color: #73d89b;
+  background: linear-gradient(180deg, #21413d, #14302e);
+}
+
+.upgrade-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.balance-note {
+  margin-top: 9px;
+  color: #d4c891;
+  font-size: 11px;
+  line-height: 1.45;
+}

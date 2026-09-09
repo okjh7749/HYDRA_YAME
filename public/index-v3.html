@@ -9,7 +9,7 @@
 <body>
   <main class="shell">
     <header class="hud">
-      <div><strong>히드라 땅따먹기</strong> <span class="phase">COMBAT / CAPTURE MILESTONE</span></div>
+      <div><strong>히드라 땅따먹기</strong> <span class="phase">UPGRADE / BALANCE MILESTONE</span></div>
       <div class="stats">
         <span>Zones <b id="ownedZoneCount">1</b>/<b id="zoneCount">21</b></span>
         <span>Mineral <b id="mineralCount">1000</b></span>
@@ -26,6 +26,7 @@
         <span>좌클릭/드래그: 아군 선택</span>
         <span>우클릭: 이동 · 접전 시 자동 공격</span>
         <span>오버로드 + 병력 우위: 자동 점령 (-250)</span>
+        <span>HD/EV 건물 클릭: 업그레이드</span>
         <span>WASD/방향키/가장자리: 카메라</span>
         <span>미니맵 클릭: 카메라 이동</span>
       </div>
@@ -33,11 +34,21 @@
 
     <section class="bottom-panel">
       <div class="unit-card">
-        <div class="portrait">HY</div>
-        <div>
+        <div class="portrait" id="portraitLabel">HY</div>
+        <div class="selection-copy">
           <div class="eyebrow">COMMAND GROUP</div>
-          <h2>Combat Group</h2>
+          <h2 id="selectionTitle">Combat Group</h2>
           <p id="unitStatus">접전 시 자동 공격 · 성큰 파괴 후 오버로드로 점령하세요.</p>
+          <div class="upgrade-panel" id="upgradePanel" hidden>
+            <div class="upgrade-stats" id="upgradeStats"></div>
+            <div class="upgrade-actions">
+              <button type="button" data-upgrade="attack">공격력</button>
+              <button type="button" data-upgrade="defense">방어력</button>
+              <button type="button" data-upgrade="range">사거리</button>
+              <button type="button" data-upgrade="speed">이동속도</button>
+            </div>
+            <div class="balance-note" id="balanceNote"></div>
+          </div>
         </div>
       </div>
       <div class="map-card">
