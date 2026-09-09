@@ -1,0 +1,95 @@
+.match-clock {
+  min-width: 48px;
+  font-variant-numeric: tabular-nums;
+}
+
+.team-board {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 4;
+  width: 260px;
+  padding: 7px;
+  border: 1px solid rgba(117, 157, 164, 0.38);
+  background: rgba(5, 12, 15, 0.84);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.team-row {
+  display: grid;
+  grid-template-columns: 18px 42px repeat(4, 1fr);
+  align-items: center;
+  gap: 5px;
+  min-height: 25px;
+  color: #b9cbce;
+  font: 10px ui-monospace, monospace;
+}
+
+.team-row + .team-row {
+  border-top: 1px solid rgba(105, 133, 139, 0.16);
+}
+
+.team-row.eliminated {
+  opacity: 0.42;
+  text-decoration: line-through;
+}
+
+.team-badge {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  color: #071013;
+  font-weight: 900;
+}
+
+.team-name {
+  color: #e5efef;
+  font-weight: 700;
+}
+
+.team-status {
+  text-align: right;
+}
+
+.match-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.34);
+}
+
+.match-overlay[hidden] {
+  display: none;
+}
+
+.match-overlay[data-mode="spectating"] {
+  place-content: start center;
+  padding-top: 72px;
+  background: transparent;
+}
+
+.match-overlay-title {
+  color: #eaffe0;
+  font: 800 58px/1 ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  text-shadow: 0 2px 20px #000;
+}
+
+.match-overlay[data-mode="spectating"] .match-overlay-title {
+  font-size: 22px;
+  color: #ffc779;
+}
+
+.match-overlay-subtitle {
+  margin-top: 10px;
+  color: #9fc3c2;
+  font: 700 12px/1.3 ui-monospace, monospace;
+  letter-spacing: 0.18em;
+}

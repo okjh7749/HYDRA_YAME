@@ -105,6 +105,7 @@ function pathVelocity(unit, deltaSeconds) {
 }
 
 export function stepFormationMovement(state, map, deltaMs) {
+  if (state.match && state.match.phase !== 'running') return;
   const deltaSeconds = deltaMs / 1000;
   const spatialHash = buildHydraSpatialHash(state);
 

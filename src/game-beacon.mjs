@@ -148,6 +148,7 @@ function sendZealotHome(state, map, zealot) {
 
 export function stepBeaconSystem(state, map, deltaMs) {
   initializeBeaconSystem(state, map);
+  if (state.match && state.match.phase !== 'running') return [];
   const events = [];
 
   for (const zealot of state.units) {

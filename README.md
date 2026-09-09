@@ -21,6 +21,12 @@ StarCraft custom-map-inspired Hydra territory game.
 - one selectable Beacon Zealot per team with eight directional trigger pads
 - Beacon triggers rally every friendly Hydra toward the mapped central battle zone
 - spatial-hash Hydra separation keeps large groups from stacking or entering void terrain
+- three-second match countdown and an in-game elapsed timer
+- three deterministic non-local AI teams that expand, assault and capture territory
+- live four-team scoreboard for zones, Hydras, minerals, kills and elimination state
+- classic defeat rule: a team is eliminated when it has no Hydras and no Sunkens
+- last surviving team wins and the match simulation freezes on completion
+- local elimination switches to command-locked spectator mode with full battlefield vision
 - clickable strategic minimap with a live camera rectangle and unit dots
 - controllable Overlord and Hydras with right-click pathfinding
 - invalid movement targets snap to the nearest valid tile
