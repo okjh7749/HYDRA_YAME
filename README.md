@@ -39,5 +39,13 @@ Then open `http://127.0.0.1:8080`.
 - right click: move the selected unit or group
 - click minimap: center the camera on that world position
 
+## Combat and upgrades
+
+- Hydra kills award 5 minerals and Sunken destruction awards 200 minerals.
+- Neutral zones can be captured by an Overlord for 250 minerals with a strict Hydra lead.
+- Click the `HD` building for one-time 100 mineral range/speed upgrades.
+- Click the `EV` building for 50 mineral attack/defense levels, capped at +255.
+- Defense +161 is the first level where a 40 HP Hydra survives the base 200-damage Sunken hit.
+
 Writer code, credentials, service scripts and check configuration remain outside
 this repository.

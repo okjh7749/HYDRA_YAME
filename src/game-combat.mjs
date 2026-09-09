@@ -117,6 +117,18 @@ function hydraDefense(state, team) {
   return playerForTeam(state, team)?.upgrades.defense ?? 0;
 }
 
+export function calculateHydraDamage(state, attackerTeam, targetArmor) {
+  return hydraDamage(state, attackerTeam, targetArmor);
+}
+
+export function calculateSunkenDamage(state, targetTeam) {
+  return Math.max(1, SUNKEN_DAMAGE - hydraDefense(state, targetTeam));
+}
+
+export function calculateHydraAttackRange(state, team) {
+  return hydraAttackRange(state, team);
+}
+
 function pushEffect(state, effect) {
   state.effects.push({ ...effect, ttlMs: effect.ttlMs ?? 240 });
 }

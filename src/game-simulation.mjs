@@ -3,6 +3,7 @@ import { findPath, nearestWalkablePoint } from './game-core.mjs';
 export const HYDRA_SPAWN_INTERVAL_MS = 500;
 export const HYDRA_HP = 40;
 export const HYDRA_SPEED = 112;
+export const HYDRA_SPEED_UPGRADE_MULTIPLIER = 1.25;
 export const HYDRA_VISION_RADIUS = 176;
 export const SUNKEN_VISION_RADIUS = 240;
 export const OVERLORD_VISION_RADIUS = 280;
@@ -33,7 +34,9 @@ function createHydra(state, map, zone) {
     y: spawnPoint.y,
     hp: HYDRA_HP,
     maxHp: HYDRA_HP,
-    speed: HYDRA_SPEED,
+    speed: HYDRA_SPEED * (
+      (state.players?.find((player) => player.team === zone.ownerTeam)?.upgrades?.speed ?? 0) > 0
+        ? HYDRA_SPEED_UPGRADE_MULTIPLIER : 1),
     visionRadius: HYDRA_VISION_RADIUS,
     path: [],
     pathIndex: 0,

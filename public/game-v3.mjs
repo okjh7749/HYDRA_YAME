@@ -15,6 +15,10 @@ import {
   teamHydraCount,
 } from '/src/game-simulation.mjs';
 import {
+  SUNKEN_ARMOR,
+  calculateHydraAttackRange,
+  calculateHydraDamage,
+  calculateSunkenDamage,
   controlledZoneCount,
   ensureLocalOverlord,
   getPlayerState,
@@ -22,6 +26,15 @@ import {
   stepCapture,
   stepCombat,
 } from '/src/game-combat.mjs';
+import {
+  UPGRADE_DEFINITIONS,
+  getUpgradeBuilding,
+  initializeUpgradeBuildings,
+  nearestUpgradeBuilding,
+  purchaseUpgrade,
+  upgradeButtonState,
+  upgradeOptionsForBuilding,
+} from '/src/game-upgrades.mjs';
 
 const LOCAL_TEAM = 0;
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
@@ -36,17 +49,24 @@ const killNode = document.querySelector('#killCount');
 const sunkenKillNode = document.querySelector('#sunkenKillCount');
 const hydraCountNode = document.querySelector('#hydraCount');
 const selectionCountNode = document.querySelector('#selectionCount');
+const portraitLabelNode = document.querySelector('#portraitLabel');
+const selectionTitleNode = document.querySelector('#selectionTitle');
+const upgradePanelNode = document.querySelector('#upgradePanel');
+const upgradeStatsNode = document.querySelector('#upgradeStats');
+const balanceNoteNode = document.querySelector('#balanceNote');
 
 const ctx = gameCanvas.getContext('2d');
 const miniCtx = minimap.getContext('2d');
 const map = buildClassicMap();
 const simulation = createSimulation(map, { localTeam: LOCAL_TEAM });
 initializeCombatState(simulation, map);
+initializeUpgradeBuildings(simulation);
 
 const initialOverlord = simulation.units.find(
   (unit) => unit.type === 'overlord' && unit.team === LOCAL_TEAM,
 );
 const selectedIds = new Set(initialOverlord ? [initialOverlord.id] : []);
+let selectedBuildingId = null;
 
 zoneCountNode.textContent = String(map.zones.length);
 
@@ -217,6 +237,63 @@ function drawZones() {
     if (zone.ownerTeam !== null) {
       drawSunken(zone, x, y + 27, teamColors[zone.ownerTeam], zoneVisible);
     }
+  }
+}
+
+function drawUpgradeBuildings() {
+  for (const building of simulation.upgradeBuildings ?? []) {
+    if (!visibleWorldPoint(building.x, building.y, 48)) continue;
+    if (!(building.team === LOCAL_TEAM || pointVisible(building.x, building.y))) continue;
+
+    const x = building.x - camera.x;
+    const y = building.y - camera.y;
+    const selected = selectedBuildingId === building.id;
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    if (selected) {
+      ctx.strokeStyle = '#7cff91';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 29, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = building.type === 'hydra-den' ? '#3b2343' : '#253d32';
+    ctx.strokeStyle = teamColors[building.team];
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (building.type === 'hydra-den') {
+      ctx.moveTo(0, -20);
+      ctx.lineTo(20, -5);
+      ctx.lineTo(13, 18);
+      ctx.lineTo(-13, 18);
+      ctx.lineTo(-20, -5);
+    } else {
+      for (let i = 0; i < 8; i += 1) {
+        const angle = (Math.PI * 2 * i) / 8 - Math.PI / 8;
+        const px = Math.cos(angle) * 20;
+        const py = Math.sin(angle) * 20;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#eaf7e7';
+    ctx.font = 'bold 10px ui-monospace, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(building.shortLabel, 0, 1);
+
+    ctx.fillStyle = '#101719';
+    ctx.fillRect(-22, -29, 44, 4);
+    ctx.fillStyle = '#74e68e';
+    ctx.fillRect(-22, -29, 44 * Math.max(0, building.hp / building.maxHp), 4);
+    ctx.restore();
   }
 }
 
@@ -433,9 +510,47 @@ function pruneSelection() {
   }
 }
 
+function renderUpgradePanel(building) {
+  if (!building) {
+    upgradePanelNode.hidden = true;
+    return;
+  }
+
+  upgradePanelNode.hidden = false;
+  const player = getPlayerState(simulation, LOCAL_TEAM);
+  const options = upgradeOptionsForBuilding(building);
+  const attack = player.upgrades.attack;
+  const defense = player.upgrades.defense;
+  const range = player.upgrades.range;
+  const speed = player.upgrades.speed;
+
+  upgradeStatsNode.textContent = `공격 +${attack} · 방어 +${defense} · 사거리 ${range ? 'UP' : '기본'} · 이동속도 ${speed ? 'UP' : '기본'}`;
+
+  const sunkenDamage = calculateSunkenDamage(simulation, LOCAL_TEAM);
+  const hydraVsSunken = calculateHydraDamage(simulation, LOCAL_TEAM, SUNKEN_ARMOR);
+  const attackRange = calculateHydraAttackRange(simulation, LOCAL_TEAM);
+  balanceNoteNode.textContent = `현재 성큰→히드라 ${sunkenDamage} 피해 · 히드라→성큰 ${hydraVsSunken} 피해 · 사거리 ${attackRange}px · 방어 +161부터 성큰 한 방을 생존합니다.`;
+
+  for (const button of upgradePanelNode.querySelectorAll('button[data-upgrade]')) {
+    const key = button.dataset.upgrade;
+    const definition = UPGRADE_DEFINITIONS[key];
+    const compatible = options.some((option) => option.key === key);
+    button.hidden = !compatible;
+    if (!compatible) continue;
+
+    const state = upgradeButtonState(simulation, LOCAL_TEAM, building, key);
+    const levelText = definition.max === 1
+      ? (state.level >= 1 ? '완료' : '업그레이드')
+      : `+${state.level}/${state.max}`;
+    button.textContent = `${definition.label} ${levelText} · ${definition.cost} 미네랄`;
+    button.disabled = !state.enabled;
+  }
+}
+
 function updateHud() {
   pruneSelection();
   const player = getPlayerState(simulation, LOCAL_TEAM);
+  const building = getUpgradeBuilding(simulation, selectedBuildingId);
   mineralNode.textContent = String(player.minerals);
   killNode.textContent = String(player.kills);
   sunkenKillNode.textContent = String(player.sunkenKills);
@@ -465,10 +580,31 @@ function updateHud() {
   statusNode.textContent = `${parts.join(' · ')} · 우클릭 이동 / 접전 시 자동 공격`;
 }
 
+function updateBuildingHud() {
+  const building = getUpgradeBuilding(simulation, selectedBuildingId);
+  if (!building) {
+    renderUpgradePanel(null);
+    portraitLabelNode.textContent = 'HY';
+    selectionTitleNode.textContent = 'Combat Group';
+    return;
+  }
+
+  selectedIds.clear();
+  selectionCountNode.textContent = '1';
+  portraitLabelNode.textContent = building.shortLabel;
+  selectionTitleNode.textContent = building.label;
+  renderUpgradePanel(building);
+
+  if (transientStatusMs <= 0) {
+    statusNode.textContent = `HP ${Math.ceil(building.hp)} / ${building.maxHp} · 이 건물에서 전용 업그레이드를 구매합니다.`;
+  }
+}
+
 function render(forceMinimap = false) {
   visionSources = getVisionSources(simulation, map, LOCAL_TEAM);
   drawTerrain();
   drawZones();
+  drawUpgradeBuildings();
   drawUnits();
   drawCombatEffects();
   drawFog();
@@ -487,6 +623,17 @@ function selectFromDrag() {
   const endWorld = screenToWorld(drag.currentX, drag.currentY);
   const screenDistance = Math.hypot(drag.currentX - drag.startX, drag.currentY - drag.startY);
   selectedIds.clear();
+
+  if (screenDistance < 6) {
+    const building = nearestUpgradeBuilding(simulation, LOCAL_TEAM, endWorld, 32);
+    if (building) {
+      selectedBuildingId = building.id;
+      updateHud();
+      updateBuildingHud();
+      return;
+    }
+  }
+  selectedBuildingId = null;
 
   if (screenDistance < 6) {
     const unit = nearestSelectableUnit(simulation, LOCAL_TEAM, endWorld, 24);
@@ -535,8 +682,36 @@ function frame(now) {
   }
 
   updateHud();
+  updateBuildingHud();
   render();
   requestAnimationFrame(frame);
+}
+
+for (const button of upgradePanelNode.querySelectorAll('button[data-upgrade]')) {
+  button.addEventListener('click', () => {
+    const building = getUpgradeBuilding(simulation, selectedBuildingId);
+    if (!building) return;
+
+    const key = button.dataset.upgrade;
+    const result = purchaseUpgrade(simulation, LOCAL_TEAM, building.id, key);
+    if (result.ok) {
+      const definition = UPGRADE_DEFINITIONS[key];
+      transientStatus = `${definition.label} 업그레이드 완료 · 현재 ${result.level}/${definition.max} · -${result.cost} 미네랄`;
+      transientStatusMs = 1500;
+    } else {
+      const reasons = {
+        'insufficient-minerals': '미네랄이 부족합니다.',
+        'max-level': '이미 최대 업그레이드입니다.',
+        'wrong-building': '이 건물에서는 해당 업그레이드를 할 수 없습니다.',
+        'not-owned': '내 건물에서만 업그레이드할 수 있습니다.',
+      };
+      transientStatus = reasons[result.reason] ?? '업그레이드할 수 없습니다.';
+      transientStatusMs = 1400;
+    }
+
+    updateHud();
+    updateBuildingHud();
+  });
 }
 
 window.addEventListener('resize', resizeCanvas);
