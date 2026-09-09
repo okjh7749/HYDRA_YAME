@@ -94,6 +94,7 @@ export function countHydrasNearZone(state, zone) {
 }
 
 export function stepProduction(state, map, deltaMs) {
+  if (state.match && state.match.phase !== 'running') return [];
   const spawned = [];
 
   for (const zone of map.zones) {
@@ -208,6 +209,13 @@ export function nearestSelectableUnit(state, team, point, radius = 22) {
 }
 
 export function getVisionSources(state, map, team) {
+  if (team === state.localTeam && state.match?.localMode === 'spectating') {
+    return [{
+      x: map.worldWidth / 2,
+      y: map.worldHeight / 2,
+      radius: Math.max(map.worldWidth, map.worldHeight) * 2,
+    }];
+  }
   const sources = [];
 
   for (const unit of state.units) {

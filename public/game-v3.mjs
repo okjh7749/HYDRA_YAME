@@ -1051,3 +1051,4 @@ function readabilityFrame() {
 }
 
 requestAnimationFrame(readabilityFrame);
+window.__hydraGame = { map, simulation, selectedIds, selectedBuildingId: () => selectedBuildingId };

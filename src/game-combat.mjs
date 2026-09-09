@@ -239,6 +239,7 @@ function stepEffects(state, deltaMs) {
 
 export function stepCombat(state, map, deltaMs) {
   initializeCombatState(state, map);
+  if (state.match && state.match.phase !== 'running') return;
   stepEffects(state, deltaMs);
 
   for (const unit of state.units) {
@@ -319,8 +320,9 @@ function hasStrictHydraLead(state, zone, team) {
 
 export function ensureLocalOverlord(state, map) {
   initializeCombatState(state, map);
+  if (state.match && state.match.phase !== 'running') return null;
   const player = playerForTeam(state, state.localTeam);
-  if (!player || player.minerals < CAPTURE_COST) return null;
+  if (!player || player.status === 'eliminated' || player.minerals < CAPTURE_COST) return null;
   const exists = state.units.some(
     (unit) => unit.type === 'overlord' && unit.team === state.localTeam && unit.hp > 0,
   );
@@ -330,8 +332,9 @@ export function ensureLocalOverlord(state, map) {
 export function stepCapture(state, map) {
   initializeCombatState(state, map);
   const captures = [];
+  if (state.match && state.match.phase !== 'running') return captures;
   const player = playerForTeam(state, state.localTeam);
-  if (!player || player.minerals < CAPTURE_COST) return captures;
+  if (!player || player.status === 'eliminated' || player.minerals < CAPTURE_COST) return captures;
 
   const overlords = state.units.filter(
     (unit) => unit.type === 'overlord' && unit.team === state.localTeam && unit.hp > 0,
