@@ -163,6 +163,7 @@ function nearestEnemyUnit(state, attacker, range) {
   let bestDistance = Number.POSITIVE_INFINITY;
   for (const target of state.units) {
     if (target.hp <= 0 || target.team === attacker.team || target.id === attacker.id) continue;
+    if (target.combatTargetable === false) continue;
     const distance = distanceSquared(attacker, target);
     if (distance <= rangeSquared && distance < bestDistance) {
       best = target;

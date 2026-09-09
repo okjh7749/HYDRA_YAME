@@ -10,7 +10,6 @@ import {
   getVisionSources,
   nearestSelectableUnit,
   selectUnitsInRect,
-  stepMovement,
   stepProduction,
   teamHydraCount,
 } from '/src/game-simulation.mjs';
@@ -35,6 +34,13 @@ import {
   upgradeButtonState,
   upgradeOptionsForBuilding,
 } from '/src/game-upgrades.mjs';
+import {
+  beaconPadsForTeam,
+  initializeBeaconSystem,
+  stepBeaconSystem,
+} from '/src/game-beacon.mjs';
+import { stepFormationMovement } from '/src/game-formation.mjs';
+import { drawBeaconPads, drawZealot } from '/public/beacon-render.mjs';
 
 const LOCAL_TEAM = 0;
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
@@ -61,6 +67,7 @@ const map = buildClassicMap();
 const simulation = createSimulation(map, { localTeam: LOCAL_TEAM });
 initializeCombatState(simulation, map);
 initializeUpgradeBuildings(simulation);
+initializeBeaconSystem(simulation, map);
 
 const initialOverlord = simulation.units.find(
   (unit) => unit.type === 'overlord' && unit.team === LOCAL_TEAM,
@@ -365,6 +372,7 @@ function drawUnits() {
     const selected = selectedIds.has(unit.id);
     if (unit.type === 'hydra') drawHydra(unit, selected);
     else if (unit.type === 'overlord') drawOverlord(unit, selected);
+    else if (unit.type === 'zealot') drawZealot(ctx, unit, selected, camera, teamColors);
   }
 }
 
@@ -480,7 +488,9 @@ function drawMinimap() {
 
   for (const unit of simulation.units) {
     if (!unitIsVisible(unit)) continue;
-    miniCtx.fillStyle = unit.type === 'overlord' ? '#e68ad0' : teamColors[unit.team];
+    miniCtx.fillStyle = unit.type === 'overlord'
+      ? '#e68ad0'
+      : (unit.type === 'zealot' ? '#fff0a6' : teamColors[unit.team]);
     miniCtx.beginPath();
     miniCtx.arc(
       unit.x * scaleX,
@@ -569,14 +579,17 @@ function updateHud() {
 
   let hydras = 0;
   let overlords = 0;
+  let zealots = 0;
   for (const unit of simulation.units) {
     if (!selectedIds.has(unit.id)) continue;
     if (unit.type === 'hydra') hydras += 1;
     if (unit.type === 'overlord') overlords += 1;
+    if (unit.type === 'zealot') zealots += 1;
   }
   const parts = [];
   if (hydras) parts.push(`Hydralisk × ${hydras}`);
   if (overlords) parts.push(`Overlord × ${overlords}`);
+  if (zealots) parts.push(`Beacon Zealot × ${zealots}`);
   statusNode.textContent = `${parts.join(' · ')} · 우클릭 이동 / 접전 시 자동 공격`;
 }
 
@@ -584,6 +597,17 @@ function updateBuildingHud() {
   const building = getUpgradeBuilding(simulation, selectedBuildingId);
   if (!building) {
     renderUpgradePanel(null);
+    const selectedUnits = simulation.units.filter((unit) => selectedIds.has(unit.id));
+    const zealotOnly = selectedUnits.length > 0
+      && selectedUnits.every((unit) => unit.type === 'zealot');
+    if (zealotOnly) {
+      portraitLabelNode.textContent = 'ZL';
+      selectionTitleNode.textContent = 'Beacon Zealot';
+      if (transientStatusMs <= 0) {
+        statusNode.textContent = '8방향 비콘 칸으로 이동하면 모든 히드라가 대응 Zone으로 공격 이동합니다.';
+      }
+      return;
+    }
     portraitLabelNode.textContent = 'HY';
     selectionTitleNode.textContent = 'Combat Group';
     return;
@@ -604,6 +628,7 @@ function render(forceMinimap = false) {
   visionSources = getVisionSources(simulation, map, LOCAL_TEAM);
   drawTerrain();
   drawZones();
+  drawBeaconPads(ctx, beaconPadsForTeam(simulation, LOCAL_TEAM), camera, visibleWorldPoint);
   drawUpgradeBuildings();
   drawUnits();
   drawCombatEffects();
@@ -672,7 +697,13 @@ function frame(now) {
 
   updateCamera(deltaSeconds);
   stepProduction(simulation, map, deltaMs);
-  stepMovement(simulation, deltaMs);
+  stepFormationMovement(simulation, map, deltaMs);
+  const beaconEvents = stepBeaconSystem(simulation, map, deltaMs);
+  const localBeacon = beaconEvents.find((event) => event.team === LOCAL_TEAM);
+  if (localBeacon) {
+    transientStatus = `비콘 ${localBeacon.direction} → Zone ${localBeacon.targetZoneId} · 히드라 ${localBeacon.ordered}마리 전체 공격 이동`;
+    transientStatusMs = 1900;
+  }
   stepCombat(simulation, map, deltaMs);
   const captures = stepCapture(simulation, map);
   ensureLocalOverlord(simulation, map);
