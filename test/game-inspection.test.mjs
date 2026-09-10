@@ -72,10 +72,18 @@ test('tracks a hydra attack target, attack flash, effect timing and personal kil
   assert.equal(attacker.attackFlashMs, 140);
   assert.equal(attacker.kills, 1);
   assert.equal(state.effects.length > 0, true);
-  const effect = state.effects.at(-1);
+  const effect = state.effects.find(
+    (candidate) => candidate.type === 'hydra-shot' && candidate.targetId === defender.id,
+  );
   assert.equal(effect.targetId, defender.id);
   assert.equal(effect.elapsedMs, 0);
   assert.equal(effect.durationMs, 240);
+  const death = state.effects.find((candidate) => candidate.type === 'unit-death');
+  assert.equal(death.unitType, 'hydra');
+  assert.equal(death.ownerSlot, defender.ownerSlot);
+  assert.equal(death.team, defender.team);
+  assert.equal(death.elapsedMs, 0);
+  assert.equal(death.durationMs, 560);
 });
 
 test('exposes selected sunken health, attack, armor, range and production interval', () => {

@@ -75,7 +75,7 @@ export function drawAttackFlash(ctx, camera, unit) {
 export function drawEnhancedCombatEffects(ctx, camera, effects, pointVisible) {
   for (const effect of effects) {
     if (!pointVisible(effect.x2, effect.y2)) continue;
-    if (effect.type === 'capture' || effect.type === 'sunken-destroyed') continue;
+    if (effect.type !== 'hydra-shot' && effect.type !== 'sunken-shot') continue;
 
     const duration = Math.max(1, effect.durationMs ?? 240);
     const progress = Math.min(1, (effect.elapsedMs ?? 0) / duration);

@@ -12,7 +12,7 @@ import {
   drawRtsEffects,
   drawRtsSunken,
   drawRtsUnit,
-} from '/public/rts-render-v2.mjs';
+} from '/public/rts-render-v3.mjs';
 
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
 const map = buildClassicMap();
@@ -59,6 +59,7 @@ let previousSnapshot = null;
 let snapshotReceivedAt = performance.now();
 let moveMarker = null;
 let visualFrameTime = performance.now();
+let frameEffects = [];
 let requestSequence = 1;
 let latencyMs = null;
 let drag = null;
@@ -314,6 +315,21 @@ function pointOnScreen(x, y, margin = 0) {
     && y <= camera.y + cameraWorldHeight() + margin;
 }
 
+function visualElapsedMs() {
+  return Math.max(0, visualFrameTime - snapshotReceivedAt);
+}
+
+function visualEffects() {
+  const elapsed = visualElapsedMs();
+  return (snapshot?.effects ?? [])
+    .map((effect) => ({
+      ...effect,
+      elapsedMs: (effect.elapsedMs ?? 0) + elapsed,
+      ttlMs: (effect.ttlMs ?? effect.durationMs ?? 240) - elapsed,
+    }))
+    .filter((effect) => effect.ttlMs > 0);
+}
+
 function interpolatedUnits() {
   if (!snapshot || !previousSnapshot) return snapshot?.units ?? [];
   const previousById = new Map(previousSnapshot.units.map((unit) => [unit.id, unit]));
@@ -323,6 +339,7 @@ function interpolatedUnits() {
     return {
       ...interpolateUnitPose(previous, unit, alpha),
       moving: isUnitMoving(previous, unit),
+      attackFlashMs: Math.max(0, (unit.attackFlashMs ?? 0) - visualElapsedMs()),
     };
   });
 }
@@ -372,6 +389,7 @@ function drawZones() {
         scale: CAMERA_ZOOM,
         teamColor: teamColors[zone.ownerTeam],
         timeMs: visualFrameTime,
+        effects: frameEffects,
       });
     }
   }
@@ -409,11 +427,12 @@ function drawUnit(unit) {
     teamColor: teamColors[unit.team],
     timeMs: visualFrameTime,
     moving: unit.moving,
+    effects: frameEffects,
   });
 }
 
 function drawEffects() {
-  drawRtsEffects(ctx, snapshot?.effects ?? [], camera, CAMERA_ZOOM, visualFrameTime);
+  drawRtsEffects(ctx, frameEffects, camera, CAMERA_ZOOM, visualFrameTime);
 }
 
 function drawDrag() {
@@ -426,6 +445,7 @@ function drawDrag() {
 }
 
 function renderBattlefield() {
+  frameEffects = visualEffects();
   drawTerrain();
   drawZones();
   drawBeacons();
