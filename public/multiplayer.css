@@ -1,0 +1,416 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, Pretendard, system-ui, sans-serif;
+  background: #060a0d;
+  color: #dbe8e8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(42, 83, 86, 0.22), transparent 34rem),
+    #060a0d;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 1px solid #456a6f;
+  border-radius: 4px;
+  padding: 9px 12px;
+  background: #183238;
+  color: #e9ffff;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #21454c;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+button.ghost {
+  background: transparent;
+}
+
+input {
+  width: 100%;
+  border: 1px solid #36555a;
+  border-radius: 4px;
+  padding: 9px 10px;
+  background: #0a1418;
+  color: #e9ffff;
+  outline: none;
+}
+
+input:focus {
+  border-color: #68c8c3;
+}
+
+a {
+  color: #89d8d1;
+}
+
+.app-shell {
+  width: min(1500px, 100%);
+  margin: 0 auto;
+  padding: 18px;
+}
+
+.topbar,
+.game-hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #273b40;
+  background: rgba(7, 15, 19, 0.9);
+}
+
+.topbar {
+  padding: 12px 14px;
+}
+
+.topbar strong {
+  font-size: 18px;
+}
+
+.phase,
+.eyebrow {
+  color: #79aaa9;
+  font: 700 10px/1.2 ui-monospace, monospace;
+  letter-spacing: 0.16em;
+}
+
+.phase {
+  margin-left: 10px;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+}
+
+.connection {
+  color: #efc77a;
+}
+
+.connection.online {
+  color: #7ce9a6;
+}
+
+.connection.offline {
+  color: #ff7e78;
+}
+
+.lobby-screen {
+  display: grid;
+  min-height: calc(100vh - 100px);
+  place-items: center;
+  padding: 24px 0;
+}
+
+.lobby-card {
+  width: min(680px, 100%);
+  border: 1px solid #2b4449;
+  padding: 24px;
+  background: rgba(7, 16, 20, 0.94);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+}
+
+.lobby-card h1 {
+  margin: 7px 0 8px;
+}
+
+.lobby-card p {
+  color: #8fa8aa;
+  line-height: 1.55;
+}
+
+.lobby-card label {
+  display: grid;
+  gap: 7px;
+  margin: 22px 0 12px;
+  color: #abc0c2;
+  font-size: 12px;
+}
+
+.lobby-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 10px;
+}
+
+.join-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.room-panel {
+  margin-top: 22px;
+  border-top: 1px solid #263d42;
+  padding-top: 18px;
+}
+
+.room-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.room-heading strong {
+  display: block;
+  color: #e5ffdb;
+  font: 900 30px/1 ui-monospace, monospace;
+  letter-spacing: 0.18em;
+}
+
+.room-heading > span {
+  color: #7ce9a6;
+  font: 800 11px ui-monospace, monospace;
+}
+
+.slots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.slot {
+  display: grid;
+  grid-template-columns: 40px 56px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid #263d42;
+  padding: 6px 8px;
+  background: #0a1418;
+  font-size: 11px;
+}
+
+.slot.empty {
+  color: #53676a;
+}
+
+.slot-team,
+.slot-ready {
+  font: 700 10px ui-monospace, monospace;
+}
+
+.slot-ready {
+  color: #7ce9a6;
+}
+
+.slot-ready.waiting {
+  color: #b48c58;
+}
+
+.room-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.notice {
+  min-height: 24px;
+  margin-bottom: 0;
+  font-size: 12px;
+}
+
+.notice.error {
+  color: #ff8b82;
+}
+
+.game-screen {
+  padding-top: 12px;
+}
+
+.game-hud {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  padding: 8px 11px;
+  color: #94aaac;
+  font: 11px ui-monospace, monospace;
+}
+
+.game-hud b {
+  color: #e3efef;
+}
+
+.battle-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.battle-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  border: 1px solid #24383d;
+  background: #010203;
+  overflow: hidden;
+}
+
+#battlefield {
+  display: block;
+  width: min(100%, 820px);
+  height: auto;
+  aspect-ratio: 1;
+  image-rendering: auto;
+  cursor: crosshair;
+}
+
+.side-panel {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.side-panel section {
+  border: 1px solid #283e43;
+  padding: 11px;
+  background: #091216;
+}
+
+.side-panel p,
+#networkStatus {
+  color: #82999b;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.scoreboard {
+  margin-top: 7px;
+}
+
+.score-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 38px 44px 52px;
+  gap: 5px;
+  align-items: center;
+  min-height: 27px;
+  border-top: 1px solid rgba(91, 125, 130, 0.17);
+  font: 10px ui-monospace, monospace;
+}
+
+.score-row:first-child {
+  border-top: 0;
+}
+
+.score-row.out {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.score-team {
+  font-weight: 900;
+}
+
+.upgrade-state {
+  margin: 8px 0;
+  color: #cfe2d8;
+  font: 11px ui-monospace, monospace;
+}
+
+.upgrade-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.upgrade-grid button {
+  padding: 7px 6px;
+  font-size: 10px;
+}
+
+.match-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.44);
+}
+
+.match-overlay[hidden] {
+  display: none;
+}
+
+.match-overlay strong {
+  color: #efffd8;
+  font: 900 58px/1 ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  text-shadow: 0 4px 24px #000;
+}
+
+.match-overlay span {
+  margin-top: 10px;
+  color: #9ec0c0;
+  font: 800 12px ui-monospace, monospace;
+  letter-spacing: 0.16em;
+}
+
+@media (max-width: 1050px) {
+  .battle-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .side-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .app-shell {
+    padding: 8px;
+  }
+
+  .topbar,
+  .lobby-actions,
+  .slots,
+  .side-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .lobby-card {
+    padding: 16px;
+  }
+
+  .lobby-actions {
+    display: grid;
+  }
+
+  .slots {
+    display: grid;
+  }
+
+  .room-controls {
+    flex-wrap: wrap;
+  }
+}

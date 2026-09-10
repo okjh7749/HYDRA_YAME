@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>히드라 땅따먹기 · Multiplayer</title>
+  <link rel="stylesheet" href="/public/multiplayer.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <strong>히드라 땅따먹기</strong>
+        <span class="phase">AUTHORITATIVE MULTIPLAYER</span>
+      </div>
+      <div class="top-actions">
+        <span class="connection" id="connectionStatus">연결 중…</span>
+        <a href="/classic">Classic Local</a>
+      </div>
+    </header>
+
+    <section class="lobby-screen" id="lobbyScreen">
+      <div class="lobby-card">
+        <div class="eyebrow">ROOM / LOBBY</div>
+        <h1>2–8인 방 만들기</h1>
+        <p>먼저 4개 팀에 한 명씩 배치되고, 이후 같은 팀의 두 번째 슬롯이 채워집니다.</p>
+
+        <label>
+          닉네임
+          <input id="playerName" maxlength="20" value="Player" autocomplete="nickname">
+        </label>
+
+        <div class="lobby-actions">
+          <button id="createRoom" type="button">새 방 만들기</button>
+          <div class="join-row">
+            <input id="roomCodeInput" maxlength="6" placeholder="ROOM CODE" autocomplete="off">
+            <button id="joinRoom" type="button">입장</button>
+          </div>
+        </div>
+
+        <div class="room-panel" id="roomPanel" hidden>
+          <div class="room-heading">
+            <div>
+              <span class="eyebrow">ROOM CODE</span>
+              <strong id="roomCode">----</strong>
+            </div>
+            <span id="roomStatus">LOBBY</span>
+          </div>
+          <div class="slots" id="roomSlots"></div>
+          <div class="room-controls">
+            <button id="readyButton" type="button">READY</button>
+            <button id="startButton" type="button" hidden>START MATCH</button>
+            <button class="ghost" id="leaveButton" type="button">나가기</button>
+          </div>
+        </div>
+
+        <p class="notice" id="notice">같은 PC에서도 브라우저 탭을 여러 개 열어 멀티플레이를 테스트할 수 있습니다.</p>
+      </div>
+    </section>
+
+    <section class="game-screen" id="gameScreen" hidden>
+      <div class="game-hud">
+        <span>Room <b id="gameRoomCode">----</b></span>
+        <span>Team <b id="gameTeam">-</b></span>
+        <span>Time <b id="gameTimer">00:00</b></span>
+        <span>Tick <b id="serverTick">0</b></span>
+        <span>RTT <b id="latency">-</b> ms</span>
+      </div>
+
+      <div class="battle-layout">
+        <div class="battle-wrap">
+          <canvas id="battlefield" width="820" height="820" aria-label="멀티플레이 전장"></canvas>
+          <div class="match-overlay" id="matchOverlay" hidden>
+            <strong id="overlayTitle"></strong>
+            <span id="overlaySubtitle"></span>
+          </div>
+        </div>
+
+        <aside class="side-panel">
+          <section>
+            <div class="eyebrow">TEAMS</div>
+            <div id="scoreboard" class="scoreboard"></div>
+          </section>
+          <section>
+            <div class="eyebrow">SELECTION</div>
+            <div id="selectionInfo">선택 없음</div>
+            <p>좌클릭/드래그 선택 · 우클릭 이동. 명령은 위치가 아니라 서버로 전송됩니다.</p>
+          </section>
+          <section>
+            <div class="eyebrow">UPGRADES</div>
+            <div id="upgradeState" class="upgrade-state">A+0 / D+0 / R0 / S0</div>
+            <div class="upgrade-grid">
+              <button type="button" data-upgrade="attack">공격 +1 · 50</button>
+              <button type="button" data-upgrade="defense">방어 +1 · 50</button>
+              <button type="button" data-upgrade="range">사거리 · 100</button>
+              <button type="button" data-upgrade="speed">이속 · 100</button>
+            </div>
+          </section>
+          <section>
+            <div class="eyebrow">NETWORK</div>
+            <div id="networkStatus">서버 snapshot 대기 중</div>
+          </section>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/public/multiplayer-client.mjs"></script>
+</body>
+</html>

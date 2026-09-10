@@ -3,6 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { createMultiplayerHub } from './multiplayer-hub.mjs';
+import { attachWebSocketServer } from './websocket-server.mjs';
+
 const root = normalize(join(fileURLToPath(new URL('..', import.meta.url))));
 const port = Number.parseInt(process.env.PORT ?? '8080', 10);
 
@@ -18,7 +21,9 @@ const mimeTypes = new Map([
 
 function resolveRequestPath(urlPath) {
   const decoded = decodeURIComponent(urlPath.split('?')[0]);
-  const requested = decoded === '/' ? '/public/index-v3.html' : decoded;
+  let requested = decoded;
+  if (decoded === '/') requested = '/public/multiplayer.html';
+  if (decoded === '/classic') requested = '/public/index-v3.html';
   const relative = normalize(requested).replace(/^[/\\]+/, '');
   const resolved = normalize(join(root, relative));
   if (!resolved.startsWith(root)) return null;
@@ -48,6 +53,15 @@ const server = createServer(async (request, response) => {
   }
 });
 
+const multiplayerHub = createMultiplayerHub();
+attachWebSocketServer(server, {
+  path: '/ws',
+  onConnection(peer) {
+    multiplayerHub.connect(peer);
+  },
+});
+
 server.listen(port, '127.0.0.1', () => {
-  console.log(`Hydra Territory prototype: http://127.0.0.1:${port}`);
+  console.log(`Hydra Territory multiplayer: http://127.0.0.1:${port}`);
+  console.log(`Classic local prototype: http://127.0.0.1:${port}/classic`);
 });
