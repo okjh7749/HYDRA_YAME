@@ -78,7 +78,7 @@ test('destroying a sunken neutralizes its zone and awards 200 minerals', () => {
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
 
   const attacker = state.units.find((unit) => unit.type === 'hydra' && unit.team === 0);
-  const enemyZone = map.zones[3];
+  const enemyZone = map.zones[2];
   enemyZone.sunkenHp = 1;
   attacker.x = enemyZone.x + 40;
   attacker.y = enemyZone.y;

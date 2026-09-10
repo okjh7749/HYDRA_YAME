@@ -43,7 +43,7 @@ test('creates one selectable beacon zealot and eight directional pads for every 
   );
   assert.deepEqual(
     localPads.map((pad) => pad.targetZoneId),
-    [14, 15, 18, 21, 20, 19, 16, 13],
+    [2, 3, 13, 21, 20, 19, 9, 1],
   );
 });
 
@@ -114,10 +114,10 @@ test('separation and movement never push hydras into the black void', () => {
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS * 2);
 
   const hydras = state.units.filter((unit) => unit.type === 'hydra' && unit.team === 0);
-  hydras[0].x = 80;
-  hydras[0].y = 176;
-  hydras[1].x = 82;
-  hydras[1].y = 176;
+  hydras[0].x = 464;
+  hydras[0].y = 80;
+  hydras[1].x = 466;
+  hydras[1].y = 80;
 
   for (let i = 0; i < 100; i += 1) stepFormationMovement(state, map, 50);
 

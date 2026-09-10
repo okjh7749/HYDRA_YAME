@@ -351,6 +351,18 @@ export function snapshotForClient(room, clientId) {
     (effect) => visibleToTeam(room, team, effect.x2, effect.y2, fullVision),
   );
 
+  const beacons = (room.state.beaconPads ?? [])
+    .filter((pad) => fullVision || pad.team === team)
+    .map((pad) => ({
+      id: pad.id,
+      team: pad.team,
+      direction: pad.direction,
+      targetZoneId: pad.targetZoneId,
+      x: pad.x,
+      y: pad.y,
+      radius: pad.radius,
+    }));
+
   return {
     type: 'snapshot',
     roomId: room.id,
@@ -375,6 +387,7 @@ export function snapshotForClient(room, clientId) {
     upgrades: { ...(getPlayerState(room.state, team)?.upgrades ?? {}) },
     units,
     zones,
+    beacons,
     effects,
   };
 }

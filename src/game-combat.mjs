@@ -47,7 +47,7 @@ function createOverlord(state, map, team) {
   const unit = {
     id: state.nextUnitId,
     type: 'overlord',
-    team: state.localTeam,
+    team,
     x: point.x,
     y: point.y,
     hp: 9999,

@@ -1,29 +1,20 @@
 export const MAP_TILES = 64;
 export const TILE_SIZE = 32;
+export const CLASSIC_ZONE_SPAN = 384;
 
 const ZONE_CENTERS = [
-  [5, 5], [20, 5], [44, 5], [58, 5],
-  [5, 20], [58, 20], [5, 44], [58, 44],
-  [5, 58], [20, 58], [44, 58], [58, 58],
-  [20, 20], [32, 20], [44, 20],
-  [20, 32], [32, 32], [44, 32],
-  [20, 44], [32, 44], [44, 44],
-];
-
-const CORRIDORS = [
-  [0, 1], [0, 4], [1, 12], [2, 14], [2, 3], [3, 5],
-  [4, 12], [5, 14], [6, 18], [7, 20], [8, 9], [8, 6],
-  [9, 18], [10, 20], [10, 11], [11, 7],
-  [12, 13], [13, 14], [12, 15], [14, 17],
-  [15, 16], [16, 17], [15, 18], [17, 20],
-  [18, 19], [19, 20], [13, 16], [16, 19],
+  [640, 256], [1024, 256], [1408, 256],
+  [256, 640], [640, 640], [1024, 640], [1408, 640], [1792, 640],
+  [256, 1024], [640, 1024], [1024, 1024], [1408, 1024], [1792, 1024],
+  [256, 1408], [640, 1408], [1024, 1408], [1408, 1408], [1792, 1408],
+  [640, 1792], [1024, 1792], [1408, 1792],
 ];
 
 const STARTING_OWNERS = new Map([
   [0, 0],
-  [3, 1],
-  [8, 2],
-  [11, 3],
+  [2, 1],
+  [18, 2],
+  [20, 3],
 ]);
 
 function indexOf(map, x, y) {
@@ -42,21 +33,13 @@ function fillRect(map, left, top, right, bottom) {
   }
 }
 
-function carveCorridor(map, from, to, halfWidth = 1) {
-  const [x1, y1] = from;
-  const [x2, y2] = to;
-
-  if (x1 === x2) {
-    fillRect(map, x1 - halfWidth, Math.min(y1, y2), x1 + halfWidth, Math.max(y1, y2));
-    return;
-  }
-
-  if (y1 === y2) {
-    fillRect(map, Math.min(x1, x2), y1 - halfWidth, Math.max(x1, x2), y1 + halfWidth);
-    return;
-  }
-
-  throw new Error('Classic corridor endpoints must be axis-aligned');
+function fillWorldBlock(map, centerX, centerY, span = CLASSIC_ZONE_SPAN) {
+  const half = span / 2;
+  const left = Math.floor((centerX - half) / map.tileSize);
+  const top = Math.floor((centerY - half) / map.tileSize);
+  const right = Math.ceil((centerX + half) / map.tileSize) - 1;
+  const bottom = Math.ceil((centerY + half) / map.tileSize) - 1;
+  fillRect(map, left, top, right, bottom);
 }
 
 export function buildClassicMap() {
@@ -71,20 +54,16 @@ export function buildClassicMap() {
   };
 
   for (const [zoneIndex, [x, y]] of ZONE_CENTERS.entries()) {
-    fillRect(map, x - 3, y - 3, x + 3, y + 3);
+    fillWorldBlock(map, x, y);
     map.zones.push({
       id: zoneIndex + 1,
-      tileX: x,
-      tileY: y,
-      x: (x + 0.5) * TILE_SIZE,
-      y: (y + 0.5) * TILE_SIZE,
-      radius: 2.4 * TILE_SIZE,
+      tileX: Math.floor(x / TILE_SIZE),
+      tileY: Math.floor(y / TILE_SIZE),
+      x,
+      y,
+      radius: 64,
       ownerTeam: STARTING_OWNERS.get(zoneIndex) ?? null,
     });
-  }
-
-  for (const [fromIndex, toIndex] of CORRIDORS) {
-    carveCorridor(map, ZONE_CENTERS[fromIndex], ZONE_CENTERS[toIndex]);
   }
 
   return map;
@@ -177,7 +156,11 @@ export function findPath(map, startWorld, targetWorld) {
         reverse.push(previous);
         key = `${previous.x},${previous.y}`;
       }
-      return reverse.reverse().map((tile) => tileCenter(map, tile.x, tile.y));
+      const path = reverse.reverse().map((tile) => tileCenter(map, tile.x, tile.y));
+      if (isWalkableWorld(map, targetWorld.x, targetWorld.y) && path.length > 0) {
+        path[path.length - 1] = { x: targetWorld.x, y: targetWorld.y };
+      }
+      return path;
     }
 
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {

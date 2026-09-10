@@ -13,14 +13,14 @@ const PAD_DISTANCE = 28;
 const BEACON_CENTER_Y_OFFSET = -56;
 
 export const BEACON_DIRECTIONS = Object.freeze([
-  Object.freeze({ key: 'N', dx: 0, dy: -1, targetZoneId: 14 }),
-  Object.freeze({ key: 'NE', dx: 1, dy: -1, targetZoneId: 15 }),
-  Object.freeze({ key: 'E', dx: 1, dy: 0, targetZoneId: 18 }),
+  Object.freeze({ key: 'N', dx: 0, dy: -1, targetZoneId: 2 }),
+  Object.freeze({ key: 'NE', dx: 1, dy: -1, targetZoneId: 3 }),
+  Object.freeze({ key: 'E', dx: 1, dy: 0, targetZoneId: 13 }),
   Object.freeze({ key: 'SE', dx: 1, dy: 1, targetZoneId: 21 }),
   Object.freeze({ key: 'S', dx: 0, dy: 1, targetZoneId: 20 }),
   Object.freeze({ key: 'SW', dx: -1, dy: 1, targetZoneId: 19 }),
-  Object.freeze({ key: 'W', dx: -1, dy: 0, targetZoneId: 16 }),
-  Object.freeze({ key: 'NW', dx: -1, dy: -1, targetZoneId: 13 }),
+  Object.freeze({ key: 'W', dx: -1, dy: 0, targetZoneId: 9 }),
+  Object.freeze({ key: 'NW', dx: -1, dy: -1, targetZoneId: 1 }),
 ]);
 
 function distanceSquared(a, b) {
