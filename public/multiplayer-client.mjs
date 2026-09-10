@@ -1,8 +1,21 @@
 import { buildClassicMap, clampCamera, isWalkableTile } from '/src/game-core.mjs';
+import {
+  RTS_CAMERA_ZOOM,
+  SNAPSHOT_INTERPOLATION_MS,
+  interpolateUnitPose,
+} from '/src/game-visuals.mjs';
+import {
+  drawIndustrialTerrain,
+  drawMoveMarker,
+  drawRtsBeacon,
+  drawRtsEffects,
+  drawRtsSunken,
+  drawRtsUnit,
+} from '/public/rts-render.mjs';
 
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
 const map = buildClassicMap();
-const CAMERA_ZOOM = 2.2;
+const CAMERA_ZOOM = RTS_CAMERA_ZOOM;
 
 const connectionStatus = document.querySelector('#connectionStatus');
 const lobbyScreen = document.querySelector('#lobbyScreen');
@@ -41,6 +54,10 @@ let socket = null;
 let clientId = null;
 let lobby = null;
 let snapshot = null;
+let previousSnapshot = null;
+let snapshotReceivedAt = performance.now();
+let moveMarker = null;
+let visualFrameTime = performance.now();
 let requestSequence = 1;
 let latencyMs = null;
 let drag = null;
@@ -296,51 +313,58 @@ function pointOnScreen(x, y, margin = 0) {
     && y <= camera.y + cameraWorldHeight() + margin;
 }
 
-function drawTerrain() {
-  ctx.fillStyle = '#010204';
-  ctx.fillRect(0, 0, viewportWidth, viewportHeight);
-  const tileSize = map.tileSize;
-  const startX = Math.max(0, Math.floor(camera.x / tileSize) - 1);
-  const startY = Math.max(0, Math.floor(camera.y / tileSize) - 1);
-  const endX = Math.min(map.columns - 1, Math.ceil((camera.x + cameraWorldWidth()) / tileSize) + 1);
-  const endY = Math.min(map.rows - 1, Math.ceil((camera.y + cameraWorldHeight()) / tileSize) + 1);
+function interpolatedUnits() {
+  if (!snapshot || !previousSnapshot) return snapshot?.units ?? [];
+  const previousById = new Map(previousSnapshot.units.map((unit) => [unit.id, unit]));
+  const alpha = Math.min(1, Math.max(0, (visualFrameTime - snapshotReceivedAt) / SNAPSHOT_INTERPOLATION_MS));
+  return snapshot.units.map((unit) => interpolateUnitPose(previousById.get(unit.id), unit, alpha));
+}
 
-  for (let y = startY; y <= endY; y += 1) {
-    for (let x = startX; x <= endX; x += 1) {
-      if (!isWalkableTile(map, x, y)) continue;
-      ctx.fillStyle = (x + y) % 2 ? '#172025' : '#1d282d';
-      ctx.fillRect(
-        (x * tileSize - camera.x) * CAMERA_ZOOM,
-        (y * tileSize - camera.y) * CAMERA_ZOOM,
-        tileSize * CAMERA_ZOOM + 1,
-        tileSize * CAMERA_ZOOM + 1,
-      );
-    }
-  }
+function drawTerrain() {
+  drawIndustrialTerrain(
+    ctx,
+    map,
+    camera,
+    viewportWidth,
+    viewportHeight,
+    CAMERA_ZOOM,
+    isWalkableTile,
+  );
 }
 
 function drawZones() {
   for (const zone of snapshot?.zones ?? []) {
-    if (!zone.visible) continue;
-    if (!pointOnScreen(zone.x, zone.y, zone.radius + 36)) continue;
-    const point = worldToCanvas(zone.x, zone.y);
-    const radius = zone.radius * CAMERA_ZOOM;
-    ctx.strokeStyle = zone.ownerTeam === null ? '#64767a' : teamColors[zone.ownerTeam];
-    ctx.lineWidth = zone.ownerTeam === null ? 1 : 2;
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
-    ctx.stroke();
-
-    if (zone.ownerTeam !== null && zone.sunkenHp > 0) {
-      const sunken = worldToCanvas(zone.x, zone.y + 27);
+    if (!zone.visible || !pointOnScreen(zone.x, zone.y, 52)) continue;
+    const center = worldToCanvas(zone.x, zone.y);
+    if (zone.ownerTeam !== null) {
+      ctx.save();
+      ctx.globalAlpha = 0.09;
       ctx.fillStyle = teamColors[zone.ownerTeam];
       ctx.beginPath();
-      ctx.moveTo(sunken.x, sunken.y - 7);
-      ctx.lineTo(sunken.x + 7, sunken.y);
-      ctx.lineTo(sunken.x, sunken.y + 7);
-      ctx.lineTo(sunken.x - 7, sunken.y);
-      ctx.closePath();
+      ctx.ellipse(center.x, center.y + 12 * CAMERA_ZOOM, 46 * CAMERA_ZOOM, 28 * CAMERA_ZOOM, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = '#789095';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(center.x - 5, center.y);
+      ctx.lineTo(center.x + 5, center.y);
+      ctx.moveTo(center.x, center.y - 5);
+      ctx.lineTo(center.x, center.y + 5);
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (zone.ownerTeam !== null && zone.sunkenHp > 0) {
+      const sunken = worldToCanvas(zone.x, zone.y + 27);
+      drawRtsSunken(ctx, zone, {
+        x: sunken.x,
+        y: sunken.y,
+        scale: CAMERA_ZOOM,
+        teamColor: teamColors[zone.ownerTeam],
+      });
     }
   }
 }
@@ -349,82 +373,38 @@ function drawBeacons() {
   const pads = snapshot?.beacons ?? [];
   for (const pad of pads) {
     if (!pointOnScreen(pad.x, pad.y, 32)) continue;
-    const point = worldToCanvas(pad.x, pad.y);
-    ctx.save();
-    ctx.translate(point.x, point.y);
-    ctx.fillStyle = 'rgba(38, 126, 151, 0.52)';
-    ctx.strokeStyle = '#9fe9ff';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.rect(-15, -15, 30, 30);
-    ctx.fill();
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(215, 249, 255, 0.72)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(0, 0, 9, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.fillStyle = '#effcff';
-    ctx.font = '800 9px ui-monospace, monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(pad.direction, 0, 0);
-    ctx.restore();
+    const p = worldToCanvas(pad.x, pad.y);
+    drawRtsBeacon(ctx, pad, { x: p.x, y: p.y, scale: CAMERA_ZOOM, timeMs: visualFrameTime });
   }
-
   const ownPads = pads.filter((pad) => pad.team === snapshot?.self.team);
   if (ownPads.length > 0) {
     const centerX = ownPads.reduce((sum, pad) => sum + pad.x, 0) / ownPads.length;
     const centerY = ownPads.reduce((sum, pad) => sum + pad.y, 0) / ownPads.length;
     if (pointOnScreen(centerX, centerY, 80)) {
-      const point = worldToCanvas(centerX, centerY);
-      ctx.fillStyle = '#d8f7ff';
-      ctx.font = '800 10px ui-monospace, monospace';
+      const p = worldToCanvas(centerX, centerY);
+      ctx.fillStyle = 'rgba(210, 245, 250, 0.76)';
+      ctx.font = '700 10px ui-monospace, monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('MASS ASSAULT', point.x, point.y - 48);
+      ctx.fillText('MASS ASSAULT', p.x, p.y - 48 * CAMERA_ZOOM);
     }
   }
 }
 
 function drawUnit(unit) {
-  if (!pointOnScreen(unit.x, unit.y, 24)) return;
-  const point = worldToCanvas(unit.x, unit.y);
-  const selected = selectedIds.has(unit.id);
-  if (selected) {
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, 8, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = unit.type === 'overlord'
-    ? '#cf78bd'
-    : (unit.type === 'zealot' ? '#fff1a5' : teamColors[unit.team]);
-  ctx.beginPath();
-  if (unit.type === 'hydra') {
-    const angle = unit.facing ?? 0;
-    ctx.moveTo(point.x + Math.cos(angle) * 6, point.y + Math.sin(angle) * 6);
-    ctx.lineTo(point.x + Math.cos(angle + 2.5) * 5, point.y + Math.sin(angle + 2.5) * 5);
-    ctx.lineTo(point.x + Math.cos(angle - 2.5) * 5, point.y + Math.sin(angle - 2.5) * 5);
-    ctx.closePath();
-  } else {
-    ctx.arc(point.x, point.y, unit.type === 'overlord' ? 6 : 5, 0, Math.PI * 2);
-  }
-  ctx.fill();
+  if (!pointOnScreen(unit.x, unit.y, 34)) return;
+  const p = worldToCanvas(unit.x, unit.y);
+  drawRtsUnit(ctx, unit, {
+    x: p.x,
+    y: p.y,
+    scale: CAMERA_ZOOM,
+    selected: selectedIds.has(unit.id),
+    teamColor: teamColors[unit.team],
+    timeMs: visualFrameTime,
+  });
 }
 
 function drawEffects() {
-  for (const effect of snapshot?.effects ?? []) {
-    const start = worldToCanvas(effect.x1, effect.y1);
-    const end = worldToCanvas(effect.x2, effect.y2);
-    ctx.strokeStyle = effect.type === 'sunken-shot' ? '#ff9a65' : '#b8f17c';
-    ctx.lineWidth = effect.type === 'sunken-shot' ? 2 : 1;
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.stroke();
-  }
+  drawRtsEffects(ctx, snapshot?.effects ?? [], camera, CAMERA_ZOOM, visualFrameTime);
 }
 
 function drawDrag() {
@@ -440,8 +420,9 @@ function renderBattlefield() {
   drawTerrain();
   drawZones();
   drawBeacons();
-  for (const unit of snapshot?.units ?? []) drawUnit(unit);
+  for (const unit of interpolatedUnits()) drawUnit(unit);
   drawEffects();
+  if (!drawMoveMarker(ctx, moveMarker, camera, CAMERA_ZOOM, visualFrameTime)) moveMarker = null;
   drawDrag();
 }
 
@@ -546,7 +527,9 @@ function handleMessage(message) {
 
   if (message.type === 'snapshot') {
     if (snapshot && message.sequence < snapshot.sequence) return;
+    previousSnapshot = snapshot;
     snapshot = message;
+    snapshotReceivedAt = performance.now();
     renderSnapshot();
     return;
   }
@@ -567,6 +550,8 @@ function handleMessage(message) {
   if (message.type === 'left-room') {
     lobby = null;
     snapshot = null;
+    previousSnapshot = null;
+    moveMarker = null;
     selectedIds.clear();
     camera.initialized = false;
     roomPanel.hidden = true;
@@ -671,12 +656,14 @@ battlefield.addEventListener('contextmenu', (event) => {
   event.preventDefault();
   if (!snapshot || selectedIds.size === 0 || snapshot.self.spectator) return;
   const target = eventToWorld(event);
-  command({
+  if (command({
     type: 'move',
     unitIds: [...selectedIds],
     x: target.x,
     y: target.y,
-  });
+  })) {
+    moveMarker = { x: target.x, y: target.y, startedAt: performance.now() };
+  }
 });
 
 for (const button of document.querySelectorAll('button[data-upgrade]')) {
@@ -771,6 +758,7 @@ function updateCamera(deltaMs) {
 }
 
 function animationFrame(now) {
+  visualFrameTime = now;
   const deltaMs = Math.min(50, Math.max(0, now - lastFrameAt));
   lastFrameAt = now;
   if (!gameScreen.hidden) {

@@ -40,6 +40,11 @@ import {
 } from '/src/game-beacon.mjs';
 import { stepFormationMovement } from '/src/game-formation.mjs';
 import { playerHydraCount } from '/src/game-ownership.mjs';
+import {
+  drawIndustrialTerrain,
+  drawRtsSunken,
+  drawRtsUnit,
+} from '/public/rts-render.mjs';
 import { drawBeaconPads, drawZealot } from '/public/beacon-render.mjs';
 
 const LOCAL_TEAM = 0;
@@ -158,54 +163,12 @@ function updateCamera(deltaSeconds) {
 }
 
 function drawTerrain() {
-  ctx.fillStyle = '#020305';
-  ctx.fillRect(0, 0, viewportWidth, viewportHeight);
-
-  const tileSize = map.tileSize;
-  const startX = Math.max(0, Math.floor(camera.x / tileSize) - 1);
-  const startY = Math.max(0, Math.floor(camera.y / tileSize) - 1);
-  const endX = Math.min(map.columns - 1, Math.ceil((camera.x + viewportWidth) / tileSize) + 1);
-  const endY = Math.min(map.rows - 1, Math.ceil((camera.y + viewportHeight) / tileSize) + 1);
-
-  for (let y = startY; y <= endY; y += 1) {
-    for (let x = startX; x <= endX; x += 1) {
-      if (!isWalkableTile(map, x, y)) continue;
-      const sx = x * tileSize - camera.x;
-      const sy = y * tileSize - camera.y;
-      ctx.fillStyle = (x + y) % 2 === 0 ? '#252b30' : '#1d2328';
-      ctx.fillRect(sx, sy, tileSize + 1, tileSize + 1);
-      ctx.strokeStyle = 'rgba(116, 145, 151, 0.08)';
-      ctx.strokeRect(sx + 0.5, sy + 0.5, tileSize - 1, tileSize - 1);
-    }
-  }
+  drawIndustrialTerrain(ctx, map, camera, viewportWidth, viewportHeight, 1, isWalkableTile);
 }
 
 function drawSunken(zone, x, y, color, visible) {
   if (!visible || zone.sunkenHp <= 0) return;
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.strokeStyle = color;
-  ctx.fillStyle = '#341b1f';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  for (let i = 0; i < 8; i += 1) {
-    const angle = (Math.PI * 2 * i) / 8;
-    const radius = i % 2 === 0 ? 17 : 8;
-    const px = Math.cos(angle) * radius;
-    const py = Math.sin(angle) * radius;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  const hpRatio = Math.max(0, zone.sunkenHp / zone.sunkenMaxHp);
-  ctx.fillStyle = '#101719';
-  ctx.fillRect(-22, -29, 44, 5);
-  ctx.fillStyle = hpRatio > 0.35 ? '#74e68e' : '#e4b15b';
-  ctx.fillRect(-22, -29, 44 * hpRatio, 5);
-  ctx.restore();
+  drawRtsSunken(ctx, zone, { x, y, scale: 1, teamColor: color });
 }
 
 function drawZones() {
@@ -215,30 +178,25 @@ function drawZones() {
     const x = zone.x - camera.x;
     const y = zone.y - camera.y;
 
-    if (zone.ownerTeam !== null && zoneVisible) {
-      ctx.globalAlpha = 0.13;
+    if (zoneVisible && zone.ownerTeam !== null) {
+      ctx.save();
+      ctx.globalAlpha = 0.08;
       ctx.fillStyle = teamColors[zone.ownerTeam];
       ctx.beginPath();
-      ctx.arc(x, y, zone.radius, 0, Math.PI * 2);
+      ctx.ellipse(x, y + 12, 46, 28, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-
-    if (zoneVisible) {
-      ctx.strokeStyle = zone.ownerTeam === null ? '#65777d' : teamColors[zone.ownerTeam];
-      ctx.lineWidth = zone.ownerTeam === null ? 1 : 2;
+      ctx.restore();
+    } else if (zoneVisible) {
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = '#789095';
       ctx.beginPath();
-      ctx.arc(x, y, zone.radius, 0, Math.PI * 2);
+      ctx.moveTo(x - 4, y);
+      ctx.lineTo(x + 4, y);
+      ctx.moveTo(x, y - 4);
+      ctx.lineTo(x, y + 4);
       ctx.stroke();
-
-      ctx.fillStyle = '#dce7e7';
-      ctx.font = '11px ui-monospace, monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(`Z${zone.id}`, x, y - 13);
-      ctx.fillStyle = zone.ownerTeam === null ? '#8fa1a4' : teamColors[zone.ownerTeam];
-      ctx.beginPath();
-      ctx.arc(x, y, 7, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.restore();
     }
 
     if (zone.ownerTeam !== null) {
@@ -305,61 +263,25 @@ function drawUpgradeBuildings() {
 }
 
 function drawHydra(unit, selected) {
-  const x = unit.x - camera.x;
-  const y = unit.y - camera.y;
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(unit.facing || 0);
-
-  if (selected) {
-    ctx.strokeStyle = '#7cff91';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 13, 9, 0, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = teamColors[unit.team] ?? '#d45454';
-  ctx.strokeStyle = unit.team === LOCAL_TEAM ? '#b8ffe4' : '#ffb0a9';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(12, 0);
-  ctx.lineTo(-7, -7);
-  ctx.lineTo(-3, 0);
-  ctx.lineTo(-7, 7);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-
-  if (selected || unit.hp < unit.maxHp) {
-    ctx.fillStyle = '#101719';
-    ctx.fillRect(x - 12, y - 16, 24, 3);
-    ctx.fillStyle = '#74e68e';
-    ctx.fillRect(x - 12, y - 16, 24 * Math.max(0, unit.hp / unit.maxHp), 3);
-  }
+  drawRtsUnit(ctx, unit, {
+    x: unit.x - camera.x,
+    y: unit.y - camera.y,
+    scale: 1,
+    selected,
+    teamColor: teamColors[unit.team],
+    timeMs: performance.now(),
+  });
 }
 
 function drawOverlord(unit, selected) {
-  const x = unit.x - camera.x;
-  const y = unit.y - camera.y;
-  if (selected) {
-    ctx.strokeStyle = '#7cff91';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(x, y, 24, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = '#7d3f69';
-  ctx.beginPath();
-  ctx.ellipse(x, y, 17, 13, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#bb759f';
-  ctx.beginPath();
-  ctx.arc(x - 7, y - 3, 4, 0, Math.PI * 2);
-  ctx.arc(x + 7, y - 3, 4, 0, Math.PI * 2);
-  ctx.fill();
+  drawRtsUnit(ctx, unit, {
+    x: unit.x - camera.x,
+    y: unit.y - camera.y,
+    scale: 1,
+    selected,
+    teamColor: teamColors[unit.team],
+    timeMs: performance.now(),
+  });
 }
 
 function unitIsVisible(unit) {
