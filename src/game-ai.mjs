@@ -47,13 +47,14 @@ function teamHasStrictHydraLead(state, zone, team) {
 }
 
 function createAiOverlord(state, map, team) {
-  const player = getPlayerState(state, team);
+  const player = getPlayerState(state, team * 2);
   if (!player) return null;
   const point = nearestWalkablePoint(map, player.homeX + 54, player.homeY - 32, 8)
     ?? { x: player.homeX, y: player.homeY };
   const unit = {
     id: state.nextUnitId,
     type: 'overlord',
+    ownerSlot: team * 2,
     team,
     x: point.x,
     y: point.y,
@@ -76,7 +77,7 @@ function createAiOverlord(state, map, team) {
 }
 
 export function ensureAiOverlord(state, map, team) {
-  const player = getPlayerState(state, team);
+  const player = getPlayerState(state, team * 2);
   if (!player || player.status === 'eliminated' || team === state.localTeam) return null;
 
   const existing = state.units.find(
@@ -103,11 +104,12 @@ function resetCapturedSunken(zone) {
 }
 
 function captureNeutralZone(state, zone, team, overlord) {
-  const player = getPlayerState(state, team);
+  const player = getPlayerState(state, team * 2);
   if (!player || player.minerals < CAPTURE_COST) return null;
   player.minerals -= CAPTURE_COST;
   player.captures += 1;
   overlord.hp = 0;
+  zone.ownerSlot = team * 2;
   zone.ownerTeam = team;
   resetCapturedSunken(zone);
   state.effects.push({
@@ -149,7 +151,7 @@ export function stepAiCaptures(state, map) {
 }
 
 export function chooseAiTarget(state, map, team) {
-  const player = getPlayerState(state, team);
+  const player = getPlayerState(state, team * 2);
   if (!player || player.status === 'eliminated') return null;
 
   const candidates = map.zones.filter((zone) => zone.ownerTeam !== team);
@@ -167,11 +169,12 @@ export function chooseAiTarget(state, map, team) {
 
 export function initializeAiState(state) {
   if (state.aiControllers) return state.aiControllers;
-  state.aiControllers = (state.players ?? [])
+  const teams = [...new Set((state.players ?? [])
     .filter((player) => player.team !== state.localTeam)
-    .map((player) => ({
-      team: player.team,
-      decisionCooldownMs: 900 + player.team * 450,
+    .map((player) => player.team))];
+  state.aiControllers = teams.map((team) => ({
+      team,
+      decisionCooldownMs: 900 + team * 450,
       targetZoneId: null,
       decisions: 0,
     }));
@@ -193,7 +196,7 @@ export function stepAi(state, map, deltaMs) {
   const events = [...stepAiCaptures(state, map)];
 
   for (const controller of controllers) {
-    const player = getPlayerState(state, controller.team);
+    const player = getPlayerState(state, controller.team * 2);
     if (!player || player.status === 'eliminated') continue;
 
     controller.decisionCooldownMs -= deltaMs;

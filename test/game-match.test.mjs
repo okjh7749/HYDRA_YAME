@@ -4,6 +4,7 @@ import test from 'node:test';
 import { initializeBeaconSystem } from '../src/game-beacon.mjs';
 import { initializeCombatState } from '../src/game-combat.mjs';
 import { buildClassicMap } from '../src/game-core.mjs';
+import { setZoneOwner } from '../src/game-ownership.mjs';
 import {
   evaluateMatchState,
   formatMatchTime,
@@ -29,7 +30,7 @@ function eliminateTeam(state, map, team) {
   for (const zone of map.zones) {
     if (zone.ownerTeam === team) {
       zone.sunkenHp = 0;
-      zone.ownerTeam = null;
+      setZoneOwner(zone, null);
     }
   }
   state.units = state.units.filter((unit) => unit.type !== 'hydra' || unit.team !== team);
@@ -59,8 +60,12 @@ test('classic elimination depends only on hydras and sunkens', () => {
   eliminateTeam(state, map, 0);
   const events = evaluateMatchState(state, map);
 
-  assert.deepEqual(events, [{ type: 'team-eliminated', team: 0 }]);
+  assert.deepEqual(events, [
+    { type: 'player-eliminated', slot: 0, team: 0 },
+    { type: 'player-eliminated', slot: 1, team: 0 },
+  ]);
   assert.equal(state.players[0].status, 'eliminated');
+  assert.equal(state.players[1].status, 'eliminated');
   assert.equal(state.match.localMode, 'spectating');
   assert.equal(state.units.some((unit) => unit.team === 0), false);
   assert.equal(
@@ -91,9 +96,9 @@ test('team rows expose status, territory, army and economy for the scoreboard', 
   assert.deepEqual(rows[0], {
     team: 0,
     status: 'active',
-    zones: 1,
+    zones: 2,
     hydras: 0,
-    minerals: 1000,
+    minerals: 2000,
     kills: 0,
     captures: 0,
   });

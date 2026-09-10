@@ -19,12 +19,20 @@ test('creates the local overlord and gives the starting base live vision', () =>
   const map = buildClassicMap();
   const state = createSimulation(map, { localTeam: 0 });
   const overlord = state.units.find((unit) => unit.type === 'overlord');
+  const localHome = map.zones.find((zone) => zone.ownerSlot === 0);
+  const allyHome = map.zones.find((zone) => zone.ownerSlot === 1);
+  const enemyHome = map.zones.find((zone) => zone.ownerSlot === 2);
 
   assert.ok(overlord);
+  assert.ok(localHome);
+  assert.ok(allyHome);
+  assert.ok(enemyHome);
+  assert.equal(overlord.ownerSlot, 0);
   assert.equal(overlord.team, 0);
   assert.equal(isWalkableWorld(map, overlord.x, overlord.y), true);
-  assert.equal(isPointVisible(state, map, 0, map.zones[0].x, map.zones[0].y), true);
-  assert.equal(isPointVisible(state, map, 0, map.zones[3].x, map.zones[3].y), false);
+  assert.equal(isPointVisible(state, map, 0, localHome.x, localHome.y), true);
+  assert.equal(isPointVisible(state, map, 0, allyHome.x, allyHome.y), true);
+  assert.equal(isPointVisible(state, map, 0, enemyHome.x, enemyHome.y), false);
 });
 
 test('every owned sunken produces one hydra every 500ms', () => {
@@ -34,24 +42,29 @@ test('every owned sunken produces one hydra every 500ms', () => {
   assert.equal(stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS - 1).length, 0);
   const spawned = stepProduction(state, map, 1);
 
-  assert.equal(spawned.length, 4);
-  assert.equal(teamHydraCount(state, 0), 1);
-  assert.equal(teamHydraCount(state, 1), 1);
-  assert.equal(teamHydraCount(state, 2), 1);
-  assert.equal(teamHydraCount(state, 3), 1);
+  assert.equal(spawned.length, 8);
+  assert.equal(teamHydraCount(state, 0), 2);
+  assert.equal(teamHydraCount(state, 1), 2);
+  assert.equal(teamHydraCount(state, 2), 2);
+  assert.equal(teamHydraCount(state, 3), 2);
+  assert.deepEqual(
+    spawned.map((unit) => unit.ownerSlot).sort((a, b) => a - b),
+    [0, 1, 2, 3, 4, 5, 6, 7],
+  );
 });
 
 test('local zone production pauses at the classic 80-hydra presence cap', () => {
   const map = buildClassicMap();
   const state = createSimulation(map, { localTeam: 0 });
-  const startZone = map.zones[0];
+  const startZone = map.zones.find((zone) => zone.ownerSlot === 0);
+  assert.ok(startZone);
 
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS * MAX_LOCAL_HYDRAS_PER_ZONE);
 
   assert.equal(countHydrasNearZone(state, startZone), MAX_LOCAL_HYDRAS_PER_ZONE);
 
   const spawned = stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
-  assert.equal(spawned.some((unit) => unit.team === 0 && unit.sourceZoneId === startZone.id), false);
+  assert.equal(spawned.some((unit) => unit.ownerSlot === 0 && unit.sourceZoneId === startZone.id), false);
 });
 
 test('box selection only returns units owned by the requested team', () => {
@@ -59,7 +72,8 @@ test('box selection only returns units owned by the requested team', () => {
   const state = createSimulation(map, { localTeam: 0 });
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
 
-  const zone = map.zones[0];
+  const zone = map.zones.find((candidate) => candidate.ownerSlot === 0);
+  assert.ok(zone);
   const selected = selectUnitsInRect(state, 0, {
     x1: zone.x - 120,
     y1: zone.y - 120,
@@ -69,7 +83,7 @@ test('box selection only returns units owned by the requested team', () => {
 
   assert.ok(selected.length >= 2);
   for (const id of selected) {
-    assert.equal(state.units.find((unit) => unit.id === id)?.team, 0);
+    assert.equal(state.units.find((unit) => unit.id === id)?.ownerSlot, 0);
   }
 });
 
@@ -78,7 +92,7 @@ test('selected hydras receive a valid formation move order and advance along it'
   const state = createSimulation(map, { localTeam: 0 });
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
 
-  const hydra = state.units.find((unit) => unit.type === 'hydra' && unit.team === 0);
+  const hydra = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
   const start = { x: hydra.x, y: hydra.y };
   const target = map.zones[12];
   const selected = new Set([hydra.id]);

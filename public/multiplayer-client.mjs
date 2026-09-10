@@ -268,8 +268,8 @@ function resizeCanvas() {
 function centerCameraOnHome() {
   if (!snapshot || camera.initialized || viewportWidth <= 1 || viewportHeight <= 1) return;
   const home = snapshot.zones.find(
-    (zone) => zone.visible && zone.ownerTeam === snapshot.self.team,
-  ) ?? snapshot.units.find((unit) => unit.team === snapshot.self.team);
+    (zone) => zone.visible && zone.ownerSlot === snapshot.self.slot,
+  ) ?? snapshot.units.find((unit) => unit.ownerSlot === snapshot.self.slot);
   if (!home) return;
   camera.x = home.x - cameraWorldWidth() / 2;
   camera.y = home.y - cameraWorldHeight() / 2;
@@ -452,7 +452,7 @@ function pruneSelection() {
   }
   const available = new Set(
     snapshot.units
-      .filter((unit) => unit.team === snapshot.self.team)
+      .filter((unit) => unit.ownerSlot === snapshot.self.slot)
       .map((unit) => unit.id),
   );
   for (const id of selectedIds) {
@@ -502,7 +502,7 @@ function selectUnits(start, end) {
   const click = Math.hypot(end.x - start.x, end.y - start.y) < 18;
   selectedIds.clear();
 
-  const own = snapshot.units.filter((unit) => unit.team === snapshot.self.team);
+  const own = snapshot.units.filter((unit) => unit.ownerSlot === snapshot.self.slot);
   if (click) {
     let nearest = null;
     let best = 28 * 28;
@@ -686,7 +686,7 @@ for (const button of document.querySelectorAll('button[data-upgrade]')) {
     const buildingType = key === 'attack' || key === 'defense' ? 'evolution' : 'hydra-den';
     command({
       type: 'upgrade',
-      buildingId: `upgrade-${snapshot.self.team}-${buildingType}`,
+      buildingId: `upgrade-${snapshot.self.slot}-${buildingType}`,
       upgradeKey: key,
     });
   });

@@ -35,11 +35,11 @@ function setup() {
   return { map, state };
 }
 
-test('creates two selectable upgrade buildings for each of the four teams', () => {
+test('creates two selectable upgrade buildings for each of the eight players', () => {
   const { state } = setup();
-  assert.equal(state.upgradeBuildings.length, 8);
+  assert.equal(state.upgradeBuildings.length, 16);
 
-  const local = state.upgradeBuildings.filter((building) => building.team === 0);
+  const local = state.upgradeBuildings.filter((building) => building.ownerSlot === 0);
   assert.deepEqual(local.map((building) => building.type).sort(), ['evolution', 'hydra-den']);
   assert.equal(local.every((building) => building.hp === UPGRADE_BUILDING_HP), true);
 
@@ -49,8 +49,8 @@ test('creates two selectable upgrade buildings for each of the four teams', () =
 
 test('evolution chamber owns attack and defense upgrades while hydra den owns range and speed', () => {
   const { state } = setup();
-  const evolution = state.upgradeBuildings.find((building) => building.team === 0 && building.type === 'evolution');
-  const hydraDen = state.upgradeBuildings.find((building) => building.team === 0 && building.type === 'hydra-den');
+  const evolution = state.upgradeBuildings.find((building) => building.ownerSlot === 0 && building.type === 'evolution');
+  const hydraDen = state.upgradeBuildings.find((building) => building.ownerSlot === 0 && building.type === 'hydra-den');
 
   assert.deepEqual(upgradeOptionsForBuilding(evolution).map((option) => option.key).sort(), ['attack', 'defense']);
   assert.deepEqual(upgradeOptionsForBuilding(hydraDen).map((option) => option.key).sort(), ['range', 'speed']);
@@ -59,7 +59,7 @@ test('evolution chamber owns attack and defense upgrades while hydra den owns ra
 test('attack and defense cost 50 minerals per level and stop at 255', () => {
   const { state } = setup();
   const player = getPlayerState(state, 0);
-  const evolution = state.upgradeBuildings.find((building) => building.team === 0 && building.type === 'evolution');
+  const evolution = state.upgradeBuildings.find((building) => building.ownerSlot === 0 && building.type === 'evolution');
   player.minerals = 30000;
 
   for (let i = 0; i < 255; i += 1) {
@@ -76,9 +76,9 @@ test('attack and defense cost 50 minerals per level and stop at 255', () => {
 test('range and speed are one-time 100 mineral upgrades and speed affects existing and future hydras', () => {
   const { map, state } = setup();
   const player = getPlayerState(state, 0);
-  const hydraDen = state.upgradeBuildings.find((building) => building.team === 0 && building.type === 'hydra-den');
+  const hydraDen = state.upgradeBuildings.find((building) => building.ownerSlot === 0 && building.type === 'hydra-den');
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
-  const existing = state.units.find((unit) => unit.type === 'hydra' && unit.team === 0);
+  const existing = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
   const before = player.minerals;
 
   assert.equal(purchaseUpgrade(state, 0, hydraDen.id, 'speed').ok, true);
@@ -90,28 +90,34 @@ test('range and speed are one-time 100 mineral upgrades and speed affects existi
   assert.equal(calculateHydraAttackRange(state, 0), 128);
 
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
-  const localHydras = state.units.filter((unit) => unit.type === 'hydra' && unit.team === 0);
+  const localHydras = state.units.filter((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
   assert.equal(localHydras.at(-1).speed, HYDRA_SPEED * HYDRA_SPEED_UPGRADE_MULTIPLIER);
 });
 
 test('upgrade purchase rejects insufficient minerals, wrong buildings and enemy buildings', () => {
   const { state } = setup();
   const player = getPlayerState(state, 0);
-  const evolution = state.upgradeBuildings.find((building) => building.team === 0 && building.type === 'evolution');
-  const hydraDen = state.upgradeBuildings.find((building) => building.team === 0 && building.type === 'hydra-den');
-  const enemyEvolution = state.upgradeBuildings.find((building) => building.team === 1 && building.type === 'evolution');
+  const evolution = state.upgradeBuildings.find((building) => building.ownerSlot === 0 && building.type === 'evolution');
+  const hydraDen = state.upgradeBuildings.find((building) => building.ownerSlot === 0 && building.type === 'hydra-den');
+  const teammateEvolution = state.upgradeBuildings.find(
+    (building) => building.ownerSlot === 1 && building.type === 'evolution',
+  );
+  const enemyEvolution = state.upgradeBuildings.find(
+    (building) => building.ownerSlot === 2 && building.type === 'evolution',
+  );
 
   player.minerals = 49;
   assert.equal(purchaseUpgrade(state, 0, evolution.id, 'attack').reason, 'insufficient-minerals');
   player.minerals = 1000;
   assert.equal(purchaseUpgrade(state, 0, hydraDen.id, 'attack').reason, 'wrong-building');
+  assert.equal(purchaseUpgrade(state, 0, teammateEvolution.id, 'attack').reason, 'not-owned');
   assert.equal(purchaseUpgrade(state, 0, enemyEvolution.id, 'attack').reason, 'not-owned');
 });
 
 test('button state disables upgrades that are unaffordable or already maxed', () => {
   const { state } = setup();
   const player = getPlayerState(state, 0);
-  const evolution = state.upgradeBuildings.find((building) => building.team === 0 && building.type === 'evolution');
+  const evolution = state.upgradeBuildings.find((building) => building.ownerSlot === 0 && building.type === 'evolution');
 
   player.minerals = 49;
   assert.equal(upgradeButtonState(state, 0, evolution, 'attack').enabled, false);

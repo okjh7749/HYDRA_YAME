@@ -53,8 +53,9 @@ test('AI chooses a frontier zone and issues an assault to all of its hydras', ()
   const assault = events.find((event) => event.type === 'ai-assault' && event.team === 1);
 
   assert.ok(assault);
-  assert.equal(assault.ordered, AI_MIN_ASSAULT_HYDRAS);
   const hydras = state.units.filter((unit) => unit.type === 'hydra' && unit.team === 1);
+  assert.equal(assault.ordered, hydras.length);
+  assert.equal(hydras.length, AI_MIN_ASSAULT_HYDRAS * 2);
   assert.equal(hydras.every((unit) => unit.orderType === 'ai-assault'), true);
   assert.equal(hydras.every((unit) => unit.path.length > 0), true);
 });
@@ -64,7 +65,7 @@ test('AI overlord captures a neutral zone when its hydras have a strict lead', (
   spawnArmy(state, map, 1);
 
   const target = chooseAiTarget(state, map, 1);
-  const hydra = state.units.find((unit) => unit.type === 'hydra' && unit.team === 1);
+  const hydra = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 2);
   const overlord = ensureAiOverlord(state, map, 1);
   assert.ok(overlord);
 
@@ -72,12 +73,12 @@ test('AI overlord captures a neutral zone when its hydras have a strict lead', (
   hydra.y = target.y;
   overlord.x = target.x;
   overlord.y = target.y;
-  const before = state.players[1].minerals;
+  const before = state.players[2].minerals;
 
   const events = stepAiCaptures(state, map);
 
   assert.deepEqual(events, [{ type: 'ai-capture', team: 1, zoneId: target.id }]);
   assert.equal(target.ownerTeam, 1);
   assert.equal(target.sunkenHp, 9999);
-  assert.equal(state.players[1].minerals, before - 250);
+  assert.equal(state.players[2].minerals, before - 250);
 });

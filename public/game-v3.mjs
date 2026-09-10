@@ -19,11 +19,11 @@ import {
   calculateHydraDamage,
   calculateSunkenDamage,
   controlledZoneCount,
-  ensureLocalOverlord,
   getPlayerState,
   initializeCombatState,
   stepCapture,
   stepCombat,
+  stepPlayerTriggerEconomy,
 } from '/src/game-combat.mjs';
 import {
   UPGRADE_DEFINITIONS,
@@ -706,7 +706,7 @@ function frame(now) {
   }
   stepCombat(simulation, map, deltaMs);
   const captures = stepCapture(simulation, map);
-  ensureLocalOverlord(simulation, map);
+  stepPlayerTriggerEconomy(simulation, map, simulation.localPlayerSlot, deltaMs);
   if (captures.length > 0) {
     transientStatus = `점령 성공 · Zone ${captures.map((item) => item.zoneId).join(', ')} · 250 미네랄 차감`;
     transientStatusMs = 2200;

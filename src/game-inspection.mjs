@@ -7,6 +7,7 @@ import {
   calculateHydraAttackRange,
   getPlayerState,
 } from './game-combat.mjs';
+import { unitOwnerSlot, zoneOwnerSlot } from './game-ownership.mjs';
 
 function distanceSquared(a, b) {
   const dx = a.x - b.x;
@@ -40,7 +41,9 @@ function orderLabel(unit) {
 }
 
 export function inspectSelectedUnits(state, team, unitIds) {
-  const units = state.units.filter((unit) => unitIds.has(unit.id) && unit.team === team && unit.hp > 0);
+  const units = state.units.filter(
+    (unit) => unitIds.has(unit.id) && unitOwnerSlot(unit) === team && unit.hp > 0,
+  );
   if (units.length === 0) return null;
 
   const player = getPlayerState(state, team);

@@ -21,7 +21,7 @@ test('builds the 64x64 classic battlefield with 21 capture zones', () => {
   assert.equal(map.worldWidth, MAP_TILES * TILE_SIZE);
   assert.equal(map.worldHeight, MAP_TILES * TILE_SIZE);
   assert.equal(map.zones.length, 21);
-  assert.equal(map.zones.filter((zone) => zone.ownerTeam !== null).length, 4);
+  assert.equal(map.zones.filter((zone) => zone.ownerSlot !== null).length, 8);
 });
 
 test('builds the blunt classic cross instead of a diagonal X silhouette', () => {
