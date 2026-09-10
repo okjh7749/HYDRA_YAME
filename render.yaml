@@ -2,6 +2,7 @@ services:
   - type: web
     name: hydra-yame
     runtime: node
+    plan: free
     branch: main
     buildCommand: node --check src/dev-server.mjs
     startCommand: node src/dev-server.mjs

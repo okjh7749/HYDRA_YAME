@@ -79,6 +79,10 @@ merged into `main` automatically triggers a deployment. Production binds to `0.0
 `PORT`, and exposes `/healthz` for service health checks. Local launches keep the existing
 `127.0.0.1:8080` default.
 
+The Blueprint explicitly uses Render's `free` web-service compute plan so the initial hobby/test
+deployment does not require selecting a paid compute instance. Free instances can spin down while
+idle and are intended for testing rather than production-scale hosting.
+
 After the one-time Render/GitHub connection, normal development only needs a merge to `main`.
 
 ## Multiplayer controls
