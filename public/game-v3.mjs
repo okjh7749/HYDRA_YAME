@@ -47,6 +47,8 @@ import {
   drawRtsSunken,
   drawRtsUnit,
 } from '/public/rts-render-v3.mjs';
+import { combatShakeOffset, minimapUnitRadius } from '/src/rts-feel.mjs';
+import { playCombatImpact, primeRtsAudio } from '/public/rts-audio.mjs';
 
 const LOCAL_TEAM = 0;
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
@@ -103,6 +105,7 @@ let minimapAccumulator = 0;
 let visionSources = getVisionSources(simulation, map, LOCAL_TEAM);
 let transientStatus = '';
 let transientStatusMs = 0;
+const soundedEffects = new WeakSet();
 
 function resizeCanvas() {
   const rect = gameCanvas.getBoundingClientRect();
@@ -416,7 +419,7 @@ function drawMinimap() {
     miniCtx.arc(
       unit.x * scaleX,
       unit.y * scaleY,
-      unit.type === 'overlord' ? 3 : 1.2,
+      minimapUnitRadius(unit.type, unit.ownerSlot === simulation.localPlayerSlot),
       0,
       Math.PI * 2,
     );
@@ -424,8 +427,8 @@ function drawMinimap() {
   }
 
   const view = cameraRect(camera, viewportWidth, viewportHeight);
-  miniCtx.strokeStyle = '#ffffff';
-  miniCtx.lineWidth = 1;
+  miniCtx.strokeStyle = '#e7fbff';
+  miniCtx.lineWidth = 1.4;
   miniCtx.strokeRect(
     view.x * scaleX,
     view.y * scaleY,
@@ -547,6 +550,9 @@ function updateBuildingHud() {
 
 function render(forceMinimap = false) {
   visionSources = getVisionSources(simulation, map, LOCAL_TEAM);
+  const shake = combatShakeOffset(simulation.effects, performance.now());
+  ctx.save();
+  ctx.translate(shake.x, shake.y);
   drawTerrain();
   drawZones();
   drawClassicBeacons();
@@ -555,6 +561,7 @@ function render(forceMinimap = false) {
   drawCombatEffects();
   drawFog();
   drawSelectionBox();
+  ctx.restore();
 
   if (forceMinimap || minimapAccumulator >= 160) {
     drawMinimap();
@@ -626,6 +633,12 @@ function frame(now) {
     transientStatusMs = 1900;
   }
   stepCombat(simulation, map, deltaMs);
+  for (const effect of simulation.effects) {
+    if (!soundedEffects.has(effect) && (effect.elapsedMs ?? 0) <= deltaMs + 1) {
+      soundedEffects.add(effect);
+      playCombatImpact(effect);
+    }
+  }
   const captures = stepCapture(simulation, map);
   stepPlayerTriggerEconomy(simulation, map, simulation.localPlayerSlot, deltaMs);
   if (captures.length > 0) {
@@ -674,6 +687,7 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('keyup', (event) => input.keys.delete(event.code));
 
 gameCanvas.addEventListener('pointerdown', (event) => {
+  primeRtsAudio();
   if (event.button !== 0) return;
   const rect = gameCanvas.getBoundingClientRect();
   const x = event.clientX - rect.left;
@@ -710,6 +724,7 @@ gameCanvas.addEventListener('mouseleave', () => {
   input.inside = false;
 });
 gameCanvas.addEventListener('contextmenu', (event) => {
+  primeRtsAudio();
   event.preventDefault();
   const rect = gameCanvas.getBoundingClientRect();
   issueMoveCommand(event.clientX - rect.left, event.clientY - rect.top);

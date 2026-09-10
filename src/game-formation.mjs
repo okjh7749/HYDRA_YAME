@@ -1,8 +1,9 @@
 import { isWalkableWorld } from './game-core.mjs';
 
-export const HYDRA_SEPARATION_RADIUS = 18;
-export const HYDRA_SEPARATION_SPEED = 48;
-export const MAX_HYDRA_SEPARATION_PUSH = 3.5;
+export const HYDRA_SEPARATION_RADIUS = 22;
+export const HYDRA_SEPARATION_SPEED = 62;
+export const MAX_HYDRA_SEPARATION_PUSH = 4.25;
+export const HYDRA_FACING_TURN_RATE = Math.PI * 5;
 
 const SPATIAL_CELL_SIZE = 32;
 
@@ -32,7 +33,7 @@ function separationVector(unit, spatialHash, maxPush) {
     for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
       const bucket = spatialHash.get(`${cellX + offsetX},${cellY + offsetY}`) ?? [];
       for (const other of bucket) {
-        if (other.id === unit.id || other.team !== unit.team) continue;
+        if (other.id === unit.id) continue;
 
         let dx = unit.x - other.x;
         let dy = unit.y - other.y;
@@ -81,6 +82,14 @@ function advanceInsideWalkable(map, unit, dx, dy) {
   }
 }
 
+function turnTowards(current, target, maxStep) {
+  let delta = (target - current) % (Math.PI * 2);
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  if (delta < -Math.PI) delta += Math.PI * 2;
+  if (Math.abs(delta) <= maxStep) return target;
+  return current + Math.sign(delta) * maxStep;
+}
+
 function pathVelocity(unit, deltaSeconds) {
   if (unit.pathIndex >= unit.path.length) return { x: 0, y: 0 };
 
@@ -96,7 +105,12 @@ function pathVelocity(unit, deltaSeconds) {
     return { x: 0, y: 0 };
   }
 
-  unit.facing = Math.atan2(dy, dx);
+  const desiredFacing = Math.atan2(dy, dx);
+  unit.facing = turnTowards(
+    unit.facing ?? desiredFacing,
+    desiredFacing,
+    HYDRA_FACING_TURN_RATE * deltaSeconds,
+  );
   const step = Math.min(distance, unit.speed * deltaSeconds);
   return {
     x: (dx / distance) * step,
