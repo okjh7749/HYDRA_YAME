@@ -71,6 +71,16 @@ Then open:
 For a quick multiplayer smoke test, open the root URL in two browser tabs. Create a room in
 the first tab, join its room code in the second, mark both players ready, and start from the host tab.
 
+## Automatic deployment from GitHub
+
+The repository includes a `render.yaml` Blueprint for the Node/WebSocket server. After linking this
+GitHub repository to Render once, the `main` branch becomes the deployment source and each new commit
+merged into `main` automatically triggers a deployment. Production binds to `0.0.0.0`, reads Render's
+`PORT`, and exposes `/healthz` for service health checks. Local launches keep the existing
+`127.0.0.1:8080` default.
+
+After the one-time Render/GitHub connection, normal development only needs a merge to `main`.
+
 ## Multiplayer controls
 
 - left click or drag: select friendly units from the latest server snapshot

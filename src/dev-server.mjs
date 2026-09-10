@@ -32,6 +32,16 @@ function resolveRequestPath(urlPath) {
 }
 
 const server = createServer(async (request, response) => {
+  const requestPath = (request.url ?? '/').split('?')[0];
+  if (requestPath === '/healthz') {
+    response.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+    });
+    response.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
   const filePath = resolveRequestPath(request.url ?? '/');
   if (!filePath) {
     response.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
@@ -61,7 +71,7 @@ attachWebSocketServer(server, {
   },
 });
 
-server.listen(port, '127.0.0.1', () => {
+server.listen(port, process.env.HOST ?? '127.0.0.1', () => {
   console.log(`Hydra Territory multiplayer: http://127.0.0.1:${port}`);
   console.log(`Classic local prototype: http://127.0.0.1:${port}/classic`);
 });

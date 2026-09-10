@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: hydra-yame
+    runtime: node
+    branch: main
+    buildCommand: node --check src/dev-server.mjs
+    startCommand: node src/dev-server.mjs
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: NODE_ENV
+        value: production
