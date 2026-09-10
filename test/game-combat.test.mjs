@@ -81,7 +81,8 @@ test('an early sunken one-shots an unupgraded hydra and earns the kill reward', 
   assert.equal(getPlayerState(state, 0).minerals, before + HYDRA_KILL_REWARD);
 });
 
-test('destroying a sunken neutralizes its zone and awards 200 minerals', () => {
+test('destroying a sunken neutralizes its zone and awards 150 minerals', () => {
+  assert.equal(SUNKEN_KILL_REWARD, 150);
   const { map, state } = setup();
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
 
@@ -101,7 +102,7 @@ test('destroying a sunken neutralizes its zone and awards 200 minerals', () => {
   assert.equal(getPlayerState(state, 0).minerals, before + SUNKEN_KILL_REWARD);
 });
 
-test('overlord captures a neutral zone only with a strict hydra lead and pays 250 minerals', () => {
+test('overlord captures a neutral zone only with a strict Any Unit lead and pays 250 minerals', () => {
   const { map, state } = setup();
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
 
@@ -131,27 +132,32 @@ test('overlord captures a neutral zone only with a strict hydra lead and pays 25
   assert.equal(state.units.some((unit) => unit.type === 'overlord' && unit.ownerSlot === 0), false);
 });
 
-test('a tied Any Unit count prevents capture and does not spend minerals', () => {
+test('a tied Any Unit count includes beacon controllers and prevents capture', () => {
   const { map, state } = setup();
-  stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
 
   const zone = map.zones.find((candidate) => candidate.ownerSlot === null);
   const overlord = state.units.find((unit) => unit.type === 'overlord' && unit.ownerSlot === 0);
   const localHydra = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
-  const enemyHydras = state.units
-    .filter((unit) => unit.type === 'hydra' && unit.ownerSlot === 2)
-    .slice(0, 2);
-  assert.equal(enemyHydras.length, 2);
-  state.units = [overlord, localHydra, ...enemyHydras];
+  const enemyHydra = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 2);
+  const enemyZealot = {
+    id: state.nextUnitId++,
+    type: 'zealot',
+    ownerSlot: 2,
+    team: 1,
+    x: zone.x - 20,
+    y: zone.y,
+    hp: 80,
+    maxHp: 80,
+    beaconController: true,
+  };
+  state.units = [overlord, localHydra, enemyHydra, enemyZealot];
   overlord.x = zone.x;
   overlord.y = zone.y;
   localHydra.x = zone.x + 10;
   localHydra.y = zone.y;
-  enemyHydras[0].x = zone.x - 10;
-  enemyHydras[0].y = zone.y;
-  enemyHydras[1].x = zone.x - 20;
-  enemyHydras[1].y = zone.y;
+  enemyHydra.x = zone.x - 10;
+  enemyHydra.y = zone.y;
   const before = getPlayerState(state, 0).minerals;
 
   assert.deepEqual(stepCapture(state, map), []);

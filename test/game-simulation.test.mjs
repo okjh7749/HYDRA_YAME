@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { initializeBeaconSystem } from '../src/game-beacon.mjs';
+import { initializeCombatState } from '../src/game-combat.mjs';
+
 import { buildClassicMap, isWalkableWorld } from '../src/game-core.mjs';
 import {
   HYDRA_SPAWN_INTERVAL_MS,
@@ -65,6 +68,19 @@ test('local zone production pauses at the classic 80-hydra presence cap', () => 
 
   const spawned = stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
   assert.equal(spawned.some((unit) => unit.ownerSlot === 0 && unit.sourceZoneId === startZone.id), false);
+});
+
+test('the classic 80 Men cap counts the overlord and beacon zealot', () => {
+  const map = buildClassicMap();
+  const state = createSimulation(map, { localTeam: 0 });
+  initializeCombatState(state, map);
+  initializeBeaconSystem(state, map);
+  const startZone = map.zones.find((zone) => zone.ownerSlot === 0);
+  assert.ok(startZone);
+
+  stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS * (MAX_LOCAL_HYDRAS_PER_ZONE + 1));
+
+  assert.equal(countHydrasNearZone(state, startZone), MAX_LOCAL_HYDRAS_PER_ZONE - 1);
 });
 
 test('box selection only returns units owned by the requested team', () => {

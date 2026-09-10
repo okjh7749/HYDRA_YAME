@@ -110,7 +110,7 @@ function countMenNearZone(state, zone) {
   const halfSpan = CLASSIC_ZONE_SPAN / 2;
   let count = 0;
   for (const unit of state.units) {
-    if (unit.hp <= 0 || unit.beaconController) continue;
+    if (unit.hp <= 0) continue;
     if (unitOwnerSlot(unit) !== zone.ownerSlot) continue;
     if (Math.abs(unit.x - zone.x) <= halfSpan && Math.abs(unit.y - zone.y) <= halfSpan) {
       count += 1;

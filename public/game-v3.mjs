@@ -11,7 +11,6 @@ import {
   nearestSelectableUnit,
   selectUnitsInRect,
   stepProduction,
-  teamHydraCount,
 } from '/src/game-simulation.mjs';
 import {
   SUNKEN_ARMOR,
@@ -40,6 +39,7 @@ import {
   stepBeaconSystem,
 } from '/src/game-beacon.mjs';
 import { stepFormationMovement } from '/src/game-formation.mjs';
+import { playerHydraCount } from '/src/game-ownership.mjs';
 import { drawBeaconPads, drawZealot } from '/public/beacon-render.mjs';
 
 const LOCAL_TEAM = 0;
@@ -70,7 +70,7 @@ initializeUpgradeBuildings(simulation);
 initializeBeaconSystem(simulation, map);
 
 const initialOverlord = simulation.units.find(
-  (unit) => unit.type === 'overlord' && unit.team === LOCAL_TEAM,
+  (unit) => unit.type === 'overlord' && unit.ownerSlot === simulation.localPlayerSlot,
 );
 const selectedIds = new Set(initialOverlord ? [initialOverlord.id] : []);
 let selectedBuildingId = null;
@@ -527,7 +527,7 @@ function renderUpgradePanel(building) {
   }
 
   upgradePanelNode.hidden = false;
-  const player = getPlayerState(simulation, LOCAL_TEAM);
+  const player = getPlayerState(simulation, simulation.localPlayerSlot);
   const options = upgradeOptionsForBuilding(building);
   const attack = player.upgrades.attack;
   const defense = player.upgrades.defense;
@@ -536,9 +536,9 @@ function renderUpgradePanel(building) {
 
   upgradeStatsNode.textContent = `공격 +${attack} · 방어 +${defense} · 사거리 ${range ? 'UP' : '기본'} · 이동속도 ${speed ? 'UP' : '기본'}`;
 
-  const sunkenDamage = calculateSunkenDamage(simulation, LOCAL_TEAM);
-  const hydraVsSunken = calculateHydraDamage(simulation, LOCAL_TEAM, SUNKEN_ARMOR);
-  const attackRange = calculateHydraAttackRange(simulation, LOCAL_TEAM);
+  const sunkenDamage = calculateSunkenDamage(simulation, simulation.localPlayerSlot);
+  const hydraVsSunken = calculateHydraDamage(simulation, simulation.localPlayerSlot, SUNKEN_ARMOR);
+  const attackRange = calculateHydraAttackRange(simulation, simulation.localPlayerSlot);
   balanceNoteNode.textContent = `현재 성큰→히드라 ${sunkenDamage} 피해 · 히드라→성큰 ${hydraVsSunken} 피해 · 사거리 ${attackRange}px · 방어 +161부터 성큰 한 방을 생존합니다.`;
 
   for (const button of upgradePanelNode.querySelectorAll('button[data-upgrade]')) {
@@ -548,7 +548,7 @@ function renderUpgradePanel(building) {
     button.hidden = !compatible;
     if (!compatible) continue;
 
-    const state = upgradeButtonState(simulation, LOCAL_TEAM, building, key);
+    const state = upgradeButtonState(simulation, simulation.localPlayerSlot, building, key);
     const levelText = definition.max === 1
       ? (state.level >= 1 ? '완료' : '업그레이드')
       : `+${state.level}/${state.max}`;
@@ -559,13 +559,13 @@ function renderUpgradePanel(building) {
 
 function updateHud() {
   pruneSelection();
-  const player = getPlayerState(simulation, LOCAL_TEAM);
+  const player = getPlayerState(simulation, simulation.localPlayerSlot);
   const building = getUpgradeBuilding(simulation, selectedBuildingId);
   mineralNode.textContent = String(player.minerals);
   killNode.textContent = String(player.kills);
   sunkenKillNode.textContent = String(player.sunkenKills);
-  ownedZoneNode.textContent = String(controlledZoneCount(map, LOCAL_TEAM));
-  hydraCountNode.textContent = String(teamHydraCount(simulation, LOCAL_TEAM));
+  ownedZoneNode.textContent = String(controlledZoneCount(map, simulation.localPlayerSlot));
+  hydraCountNode.textContent = String(playerHydraCount(simulation, simulation.localPlayerSlot));
   selectionCountNode.textContent = String(selectedIds.size);
 
   if (transientStatusMs > 0) {
@@ -650,7 +650,7 @@ function selectFromDrag() {
   selectedIds.clear();
 
   if (screenDistance < 6) {
-    const building = nearestUpgradeBuilding(simulation, LOCAL_TEAM, endWorld, 32);
+    const building = nearestUpgradeBuilding(simulation, simulation.localPlayerSlot, endWorld, 32);
     if (building) {
       selectedBuildingId = building.id;
       updateHud();
@@ -661,10 +661,10 @@ function selectFromDrag() {
   selectedBuildingId = null;
 
   if (screenDistance < 6) {
-    const unit = nearestSelectableUnit(simulation, LOCAL_TEAM, endWorld, 24);
+    const unit = nearestSelectableUnit(simulation, simulation.localPlayerSlot, endWorld, 24);
     if (unit) selectedIds.add(unit.id);
   } else {
-    for (const id of selectUnitsInRect(simulation, LOCAL_TEAM, {
+    for (const id of selectUnitsInRect(simulation, simulation.localPlayerSlot, {
       x1: startWorld.x,
       y1: startWorld.y,
       x2: endWorld.x,
@@ -699,7 +699,7 @@ function frame(now) {
   stepProduction(simulation, map, deltaMs);
   stepFormationMovement(simulation, map, deltaMs);
   const beaconEvents = stepBeaconSystem(simulation, map, deltaMs);
-  const localBeacon = beaconEvents.find((event) => event.team === LOCAL_TEAM);
+  const localBeacon = beaconEvents.find((event) => event.ownerSlot === simulation.localPlayerSlot);
   if (localBeacon) {
     transientStatus = `비콘 ${localBeacon.direction} → Zone ${localBeacon.targetZoneId} · 히드라 ${localBeacon.ordered}마리 전체 공격 이동`;
     transientStatusMs = 1900;
@@ -724,7 +724,7 @@ for (const button of upgradePanelNode.querySelectorAll('button[data-upgrade]')) 
     if (!building) return;
 
     const key = button.dataset.upgrade;
-    const result = purchaseUpgrade(simulation, LOCAL_TEAM, building.id, key);
+    const result = purchaseUpgrade(simulation, simulation.localPlayerSlot, building.id, key);
     if (result.ok) {
       const definition = UPGRADE_DEFINITIONS[key];
       transientStatus = `${definition.label} 업그레이드 완료 · 현재 ${result.level}/${definition.max} · -${result.cost} 미네랄`;
@@ -889,7 +889,7 @@ function sunkenDetailRows(zone) {
 }
 
 function buildingDetailRows(building) {
-  const player = getPlayerState(simulation, building.team);
+  const player = getPlayerState(simulation, building.ownerSlot);
   return [
     ['Owner', teamLabel(building.team)],
     ['HP', `${Math.ceil(building.hp)} / ${building.maxHp}`],
@@ -927,7 +927,7 @@ function updateReadabilitySelectionUi() {
     return;
   }
 
-  const info = inspectSelectedUnits(simulation, LOCAL_TEAM, selectedIds);
+  const info = inspectSelectedUnits(simulation, simulation.localPlayerSlot, selectedIds);
   if (!info) {
     renderDetailRows(selectionDetailsNode, []);
     return;
@@ -965,7 +965,7 @@ function targetWorldPoint(target) {
 }
 
 function drawReadabilityOverlay() {
-  const info = inspectSelectedUnits(simulation, LOCAL_TEAM, selectedIds);
+  const info = inspectSelectedUnits(simulation, simulation.localPlayerSlot, selectedIds);
   if (info?.unit?.type === 'hydra') {
     drawRangeCircle(ctx, camera, info.unit.x, info.unit.y, info.range);
     const target = targetWorldPoint(info.target);

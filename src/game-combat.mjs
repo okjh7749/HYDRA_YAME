@@ -20,7 +20,7 @@ export const SUNKEN_ARMOR = 50;
 export const SUNKEN_DAMAGE = 200;
 export const SUNKEN_ATTACK_RANGE = 176;
 export const SUNKEN_ATTACK_COOLDOWN_MS = 900;
-export const SUNKEN_KILL_REWARD = 200;
+export const SUNKEN_KILL_REWARD = 150;
 
 export const CAPTURE_COST = 250;
 export const CAPTURE_RADIUS = 64;
@@ -344,7 +344,7 @@ function insideCaptureCenter(unit, zone) {
 function commandsMostAnyUnit(state, zone, ownerSlot) {
   const counts = new Array(PLAYER_COUNT).fill(0);
   for (const unit of state.units) {
-    if (unit.hp <= 0 || unit.beaconController || !insideLargeZone(unit, zone)) continue;
+    if (unit.hp <= 0 || !insideLargeZone(unit, zone)) continue;
     const slot = unitOwnerSlot(unit);
     if (slot !== null) counts[slot] += 1;
   }

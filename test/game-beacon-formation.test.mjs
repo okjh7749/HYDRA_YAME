@@ -51,9 +51,10 @@ test('a zealot entering a beacon pad rallies all friendly hydras and returns hom
   const { map, state } = setup();
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
 
-  const zealot = state.units.find((unit) => unit.type === 'zealot' && unit.team === 0);
-  const localHydra = state.units.find((unit) => unit.type === 'hydra' && unit.team === 0);
-  const enemyHydra = state.units.find((unit) => unit.type === 'hydra' && unit.team === 1);
+  const zealot = state.units.find((unit) => unit.type === 'zealot' && unit.ownerSlot === 0);
+  const localHydra = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
+  const teammateHydra = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 1);
+  const enemyHydra = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 2);
   const pad = beaconPadsForTeam(state, 0).find((candidate) => candidate.direction === 'SE');
 
   zealot.x = pad.x;
@@ -61,12 +62,14 @@ test('a zealot entering a beacon pad rallies all friendly hydras and returns hom
   const events = stepBeaconSystem(state, map, 16);
 
   assert.equal(events.length, 1);
+  assert.equal(events[0].ownerSlot, 0);
   assert.equal(events[0].direction, 'SE');
   assert.equal(events[0].targetZoneId, 21);
   assert.equal(events[0].ordered, 1);
   assert.equal(localHydra.orderType, 'beacon-rally');
   assert.equal(localHydra.rallyTargetZoneId, 21);
   assert.ok(localHydra.path.length > 1);
+  assert.notEqual(teammateHydra.orderType, 'beacon-rally');
   assert.notEqual(enemyHydra.orderType, 'beacon-rally');
   assert.equal(zealot.orderType, 'beacon-return');
   assert.ok(zealot.path.length > 0);
@@ -74,7 +77,7 @@ test('a zealot entering a beacon pad rallies all friendly hydras and returns hom
 
 test('a new manual command can override the zealot return order while it is moving', () => {
   const { map, state } = setup();
-  const zealot = state.units.find((unit) => unit.type === 'zealot' && unit.team === 0);
+  const zealot = state.units.find((unit) => unit.type === 'zealot' && unit.ownerSlot === 0);
   const pad = beaconPadsForTeam(state, 0).find((candidate) => candidate.direction === 'E');
 
   zealot.x = pad.x;
