@@ -77,6 +77,7 @@ let viewportWidth = 1;
 let viewportHeight = 1;
 let lastFrameAt = performance.now();
 let minimapAccumulatorMs = 0;
+let lastMatchPhase = null;
 
 function setNotice(message, error = false) {
   notice.textContent = message;
@@ -227,7 +228,13 @@ function renderUpgradeState() {
     const key = button.dataset.upgrade;
     const level = upgrades[key] ?? 0;
     const max = key === 'attack' || key === 'defense' ? 255 : 1;
-    button.disabled = locked || level >= max;
+    const requiredBuilding = key === 'attack' || key === 'defense' ? 'evolution' : 'hydra-den';
+    const buildingAvailable = (snapshot?.buildings ?? []).some(
+      (building) => building.ownerSlot === snapshot.self.slot
+        && building.type === requiredBuilding
+        && building.hp > 0,
+    );
+    button.disabled = locked || level >= max || !buildingAvailable;
   }
 }
 
@@ -286,11 +293,19 @@ function resizeCanvas() {
   clampCamera(camera, map, cameraWorldWidth(), cameraWorldHeight());
 }
 
-function centerCameraOnHome() {
-  if (!snapshot || camera.initialized || viewportWidth <= 1 || viewportHeight <= 1) return;
-  const home = snapshot.zones.find(
-    (zone) => zone.visible && zone.ownerSlot === snapshot.self.slot,
-  ) ?? snapshot.units.find((unit) => unit.ownerSlot === snapshot.self.slot);
+function centerCameraOnHome(force = false) {
+  if (!snapshot || (!force && camera.initialized) || viewportWidth <= 1 || viewportHeight <= 1) return;
+  const authoritativeHome = Number.isFinite(snapshot.self.homeX) && Number.isFinite(snapshot.self.homeY)
+    ? { x: snapshot.self.homeX, y: snapshot.self.homeY }
+    : null;
+  const home = authoritativeHome
+    ?? snapshot.units.find(
+      (unit) => unit.ownerSlot === snapshot.self.slot && unit.type === 'zealot',
+    )
+    ?? snapshot.zones.find(
+      (zone) => zone.visible && zone.ownerSlot === snapshot.self.slot,
+    )
+    ?? snapshot.units.find((unit) => unit.ownerSlot === snapshot.self.slot);
   if (!home) return;
   camera.x = home.x - cameraWorldWidth() / 2;
   camera.y = home.y - cameraWorldHeight() / 2;
@@ -418,6 +433,35 @@ function drawBeacons() {
   }
 }
 
+function drawUpgradeBuildings() {
+  for (const building of snapshot?.buildings ?? []) {
+    if (!pointOnScreen(building.x, building.y, 44)) continue;
+    const p = worldToCanvas(building.x, building.y);
+    const scale = CAMERA_ZOOM;
+    const size = 22 * scale;
+    const teamColor = teamColors[building.team] ?? teamColors[0];
+
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.fillStyle = building.type === 'hydra-den' ? '#3b2343' : '#253d32';
+    ctx.strokeStyle = teamColor;
+    ctx.lineWidth = Math.max(1.5, 1.4 * scale);
+    ctx.fillRect(-size, -size * 0.78, size * 2, size * 1.56);
+    ctx.strokeRect(-size, -size * 0.78, size * 2, size * 1.56);
+    ctx.fillStyle = '#eaf7e7';
+    ctx.font = `bold ${Math.max(9, 9 * scale)}px ui-monospace, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(building.shortLabel ?? (building.type === 'hydra-den' ? 'HD' : 'EV'), 0, 1);
+    const hpRatio = building.maxHp > 0 ? Math.max(0, Math.min(1, building.hp / building.maxHp)) : 1;
+    ctx.fillStyle = '#101719';
+    ctx.fillRect(-size, -size - 7 * scale, size * 2, 4 * scale);
+    ctx.fillStyle = '#74e68e';
+    ctx.fillRect(-size, -size - 7 * scale, size * 2 * hpRatio, 4 * scale);
+    ctx.restore();
+  }
+}
+
 function drawUnit(unit) {
   if (!pointOnScreen(unit.x, unit.y, 34)) return;
   const p = worldToCanvas(unit.x, unit.y);
@@ -454,6 +498,7 @@ function renderBattlefield() {
   drawTerrain();
   drawZones();
   drawBeacons();
+  drawUpgradeBuildings();
   for (const unit of interpolatedUnits()) drawUnit(unit);
   drawEffects();
   if (!drawMoveMarker(ctx, moveMarker, camera, CAMERA_ZOOM, visualFrameTime)) moveMarker = null;
@@ -495,6 +540,10 @@ function renderSelectionInfo() {
 function renderSnapshot() {
   if (!snapshot) return;
   showGame();
+  if (snapshot.match.phase === 'running' && lastMatchPhase !== 'running') {
+    centerCameraOnHome(true);
+  }
+  lastMatchPhase = snapshot.match.phase;
   gameRoomCode.textContent = snapshot.roomId;
   gameTeam.textContent = `${snapshot.self.team + 1}${snapshot.self.spectator ? ' · SPEC' : ''}`;
   gameTimer.textContent = formatTime(snapshot.match.elapsedMs);
@@ -593,6 +642,7 @@ function handleMessage(message) {
     moveMarker = null;
     selectedIds.clear();
     camera.initialized = false;
+    lastMatchPhase = null;
     roomPanel.hidden = true;
     lobbyScreen.hidden = false;
     gameScreen.hidden = true;
@@ -756,14 +806,47 @@ function drawMinimap() {
     miniCtx.fill();
   }
 
+  for (const pad of snapshot?.beacons ?? []) {
+    miniCtx.fillStyle = pad.team === snapshot?.self.team ? '#a5edf4' : '#66878b';
+    miniCtx.fillRect(pad.x * scaleX - 1, pad.y * scaleY - 1, 2, 2);
+  }
+
+  for (const building of snapshot?.buildings ?? []) {
+    const own = building.ownerSlot === snapshot?.self.slot;
+    const x = building.x * scaleX;
+    const y = building.y * scaleY;
+    const size = own ? 4.5 : 3.5;
+    miniCtx.fillStyle = '#091113';
+    miniCtx.fillRect(x - size / 2 - 1, y - size / 2 - 1, size + 2, size + 2);
+    miniCtx.strokeStyle = teamColors[building.team] ?? '#dbe8e8';
+    miniCtx.lineWidth = own ? 1.3 : 1;
+    miniCtx.strokeRect(x - size / 2, y - size / 2, size, size);
+  }
+
   for (const unit of snapshot?.units ?? []) {
     const own = unit.ownerSlot === snapshot?.self.slot;
     miniCtx.fillStyle = unit.type === 'overlord'
       ? '#cf78bd'
       : (unit.type === 'zealot' ? '#fff1a5' : teamColors[unit.team]);
     miniCtx.beginPath();
-    miniCtx.arc(unit.x * scaleX, unit.y * scaleY, minimapUnitRadius(unit.type, own), 0, Math.PI * 2);
+    const radius = minimapUnitRadius(unit.type, own) + (own && unit.type === 'hydra' ? 0.45 : 0);
+    miniCtx.arc(unit.x * scaleX, unit.y * scaleY, radius, 0, Math.PI * 2);
     miniCtx.fill();
+    if (own) {
+      miniCtx.strokeStyle = 'rgba(235, 255, 255, 0.82)';
+      miniCtx.lineWidth = 0.65;
+      miniCtx.stroke();
+    }
+  }
+
+  if (Number.isFinite(snapshot?.self.homeX) && Number.isFinite(snapshot?.self.homeY)) {
+    const x = snapshot.self.homeX * scaleX;
+    const y = snapshot.self.homeY * scaleY;
+    miniCtx.strokeStyle = '#eaffff';
+    miniCtx.lineWidth = 1;
+    miniCtx.beginPath();
+    miniCtx.arc(x, y, 6, 0, Math.PI * 2);
+    miniCtx.stroke();
   }
 
   miniCtx.strokeStyle = '#e7fbff';
@@ -826,6 +909,13 @@ setInterval(() => {
 
 window.addEventListener('resize', resizeCanvas);
 window.addEventListener('keydown', (event) => {
+  if (!gameScreen.hidden && event.code === 'KeyH') {
+    centerCameraOnHome(true);
+    renderBattlefield();
+    drawMinimap();
+    event.preventDefault();
+    return;
+  }
   cameraInput.keys.add(event.code);
   if (!gameScreen.hidden && (
     event.code.startsWith('Arrow')

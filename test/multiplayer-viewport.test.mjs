@@ -36,3 +36,17 @@ test('multiplayer snapshots render visible MASS ASSAULT beacon pads', async () =
   assert.match(client, /snapshot\?\.beacons/);
   assert.match(client, /MASS ASSAULT/);
 });
+
+test('multiplayer renders base infrastructure and can recenter on the authoritative home', async () => {
+  const [html, client] = await Promise.all([
+    readFile(htmlUrl, 'utf8'),
+    readFile(clientUrl, 'utf8'),
+  ]);
+
+  assert.match(client, /function drawUpgradeBuildings\(\)/);
+  assert.match(client, /snapshot\?\.buildings/);
+  assert.match(client, /snapshot\.self\.homeX/);
+  assert.match(client, /centerCameraOnHome\(true\)/);
+  assert.match(client, /event\.code === 'KeyH'/);
+  assert.match(html, /H: HOME/);
+});

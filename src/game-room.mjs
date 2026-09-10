@@ -335,6 +335,7 @@ export function snapshotForClient(room, clientId) {
   if (!roomPlayer || !room.state.match) return null;
   const team = roomPlayer.team;
   const fullVision = spectatorFor(room, roomPlayer);
+  const playerState = getPlayerState(room.state, roomPlayer.slot);
 
   const units = room.state.units
     .filter(
@@ -374,6 +375,17 @@ export function snapshotForClient(room, clientId) {
       radius: pad.radius,
     }));
 
+  const buildings = (room.state.upgradeBuildings ?? [])
+    .filter(
+      (building) => (building.hp ?? 0) > 0
+        && (
+          fullVision
+          || building.team === team
+          || visibleToTeam(room, team, building.x, building.y, false)
+        ),
+    )
+    .map(serializeUpgradeBuilding);
+
   return {
     type: 'snapshot',
     roomId: room.id,
@@ -384,7 +396,9 @@ export function snapshotForClient(room, clientId) {
       slot: roomPlayer.slot,
       team,
       spectator: fullVision,
-      minerals: getPlayerState(room.state, roomPlayer.slot)?.minerals ?? 0,
+      minerals: playerState?.minerals ?? 0,
+      homeX: playerState?.homeX ?? null,
+      homeY: playerState?.homeY ?? null,
     },
     match: {
       ...room.state.match,
@@ -400,6 +414,22 @@ export function snapshotForClient(room, clientId) {
     units,
     zones,
     beacons,
+    buildings,
     effects,
+  };
+}
+
+function serializeUpgradeBuilding(building) {
+  return {
+    id: building.id,
+    type: building.type,
+    label: building.label,
+    shortLabel: building.shortLabel,
+    ownerSlot: building.ownerSlot,
+    team: building.team,
+    x: building.x,
+    y: building.y,
+    hp: Math.max(0, Math.ceil(building.hp ?? 0)),
+    maxHp: building.maxHp ?? 0,
   };
 }
