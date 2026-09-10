@@ -43,9 +43,10 @@ import { playerHydraCount } from '/src/game-ownership.mjs';
 import {
   drawIndustrialTerrain,
   drawRtsBeacon,
+  drawRtsEffects,
   drawRtsSunken,
   drawRtsUnit,
-} from '/public/rts-render-v2.mjs';
+} from '/public/rts-render-v3.mjs';
 
 const LOCAL_TEAM = 0;
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
@@ -168,7 +169,14 @@ function drawTerrain() {
 
 function drawSunken(zone, x, y, color, visible) {
   if (!visible || zone.sunkenHp <= 0) return;
-  drawRtsSunken(ctx, zone, { x, y, scale: 1, teamColor: color, timeMs: performance.now() });
+  drawRtsSunken(ctx, zone, {
+    x,
+    y,
+    scale: 1,
+    teamColor: color,
+    timeMs: performance.now(),
+    effects: simulation.effects,
+  });
 }
 
 function drawZones() {
@@ -271,6 +279,7 @@ function drawHydra(unit, selected) {
     teamColor: teamColors[unit.team],
     timeMs: performance.now(),
     moving: unit.pathIndex < unit.path.length,
+    effects: simulation.effects,
   });
 }
 
@@ -283,6 +292,7 @@ function drawOverlord(unit, selected) {
     teamColor: teamColors[unit.team],
     timeMs: performance.now(),
     moving: unit.pathIndex < unit.path.length,
+    effects: simulation.effects,
   });
 }
 
@@ -318,51 +328,15 @@ function drawUnits() {
         teamColor: teamColors[unit.team],
         timeMs: performance.now(),
         moving: unit.pathIndex < unit.path.length,
+        effects: simulation.effects,
       });
     }
   }
 }
 
 function drawCombatEffects() {
-  for (const effect of simulation.effects) {
-    if (!pointVisible(effect.x2, effect.y2)) continue;
-    const x1 = effect.x1 - camera.x;
-    const y1 = effect.y1 - camera.y;
-    const x2 = effect.x2 - camera.x;
-    const y2 = effect.y2 - camera.y;
-    const alpha = Math.min(1, effect.ttlMs / 180);
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    if (effect.type === 'sunken-shot') {
-      ctx.strokeStyle = '#ff9a65';
-      ctx.lineWidth = 4;
-    } else if (effect.type === 'capture') {
-      ctx.strokeStyle = '#8dff9b';
-      ctx.lineWidth = 3;
-    } else if (effect.type === 'sunken-destroyed') {
-      ctx.strokeStyle = '#ffca6f';
-      ctx.lineWidth = 5;
-    } else {
-      ctx.strokeStyle = '#b9f17b';
-      ctx.lineWidth = 2;
-    }
-
-    if (effect.type === 'capture' || effect.type === 'sunken-destroyed') {
-      ctx.beginPath();
-      ctx.arc(x2, y2, 22 + (1 - alpha) * 24, 0, Math.PI * 2);
-      ctx.stroke();
-    } else {
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-      ctx.fillStyle = '#fff4ca';
-      ctx.font = '11px ui-monospace, monospace';
-      ctx.fillText(`-${effect.damage}`, x2 + 7, y2 - 7);
-    }
-    ctx.restore();
-  }
+  const visibleEffects = simulation.effects.filter((effect) => pointVisible(effect.x2, effect.y2));
+  drawRtsEffects(ctx, visibleEffects, camera, 1, performance.now());
 }
 
 function drawFog() {

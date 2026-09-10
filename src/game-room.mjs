@@ -302,6 +302,7 @@ function serializeUnit(unit) {
     hp: Math.max(0, Math.ceil(unit.hp)),
     maxHp: unit.maxHp,
     facing: unit.facing ?? 0,
+    attackFlashMs: Math.max(0, Math.ceil(unit.attackFlashMs ?? 0)),
   };
 }
 
@@ -353,6 +354,7 @@ export function snapshotForClient(room, clientId) {
       ownerTeam: visible ? zone.ownerTeam : null,
       sunkenHp: visible ? Math.max(0, Math.ceil(zone.sunkenHp ?? 0)) : null,
       sunkenMaxHp: visible ? (zone.sunkenMaxHp ?? 0) : null,
+      sunkenAttackFlashMs: visible ? Math.max(0, Math.ceil(zone.sunkenAttackFlashMs ?? 0)) : null,
     };
   });
 

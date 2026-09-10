@@ -52,6 +52,8 @@ function resetSunken(zone) {
   zone.sunkenMaxHp = SUNKEN_HP;
   zone.sunkenArmor = SUNKEN_ARMOR;
   zone.sunkenAttackCooldownMs = 0;
+  zone.sunkenAttackFlashMs = 0;
+  zone.currentTargetUnitId = null;
 }
 
 function createOverlord(state, map, ownerSlot) {
@@ -172,6 +174,23 @@ function pushEffect(state, effect) {
   });
 }
 
+function pushUnitDeathEffect(state, unit, cause = 'combat') {
+  pushEffect(state, {
+    type: 'unit-death',
+    unitId: unit.id,
+    unitType: unit.type,
+    ownerSlot: unitOwnerSlot(unit),
+    team: unit.team,
+    facing: unit.facing ?? 0,
+    cause,
+    x1: unit.x,
+    y1: unit.y,
+    x2: unit.x,
+    y2: unit.y,
+    ttlMs: 560,
+  });
+}
+
 function damageUnit(state, target, amount, attackerOwnerSlot, source) {
   if (target.hp <= 0) return false;
   target.hp -= amount;
@@ -187,6 +206,7 @@ function damageUnit(state, target, amount, attackerOwnerSlot, source) {
   if (target.hp > 0) return false;
 
   target.hp = 0;
+  pushUnitDeathEffect(state, target);
   if (target.type === 'hydra') {
     const player = playerForSlot(state, attackerOwnerSlot);
     if (player) {
@@ -230,7 +250,9 @@ function nearestEnemySunken(map, attacker, range) {
 }
 
 function destroySunken(state, zone, attackerOwnerSlot) {
-  if (zoneOwnerSlot(zone) === null) return false;
+  const defeatedOwnerSlot = zoneOwnerSlot(zone);
+  if (defeatedOwnerSlot === null) return false;
+  const defeatedTeam = zone.ownerTeam;
   zone.sunkenHp = 0;
   setZoneOwner(zone, null);
   const player = playerForSlot(state, attackerOwnerSlot);
@@ -240,6 +262,10 @@ function destroySunken(state, zone, attackerOwnerSlot) {
   }
   pushEffect(state, {
     type: 'sunken-destroyed',
+    unitType: 'sunken',
+    ownerSlot: defeatedOwnerSlot,
+    team: defeatedTeam,
+    facing: 0,
     x1: zone.x,
     y1: zone.y,
     x2: zone.x,
@@ -305,6 +331,7 @@ export function stepCombat(state, map, deltaMs) {
       y1: unit.y,
       x2: enemySunken.x,
       y2: enemySunken.y,
+      targetZoneId: enemySunken.id,
       damage: amount,
     });
     unit.attackCooldownMs = HYDRA_ATTACK_COOLDOWN_MS;
@@ -326,6 +353,7 @@ export function stepCombat(state, map, deltaMs) {
     const amount = Math.max(1, SUNKEN_DAMAGE - armor);
     damageUnit(state, target, amount, ownerSlot, { x: zone.x, y: zone.y, kind: 'sunken' });
     zone.sunkenAttackCooldownMs = SUNKEN_ATTACK_COOLDOWN_MS;
+    zone.sunkenAttackFlashMs = 140;
   }
 
   cleanupDeadUnits(state);
@@ -390,6 +418,7 @@ function killPlayerOverlords(state, ownerSlot) {
   let killed = 0;
   for (const unit of state.units) {
     if (unit.type !== 'overlord' || unitOwnerSlot(unit) !== ownerSlot || unit.hp <= 0) continue;
+    pushUnitDeathEffect(state, unit, 'trigger');
     unit.hp = 0;
     killed += 1;
   }
