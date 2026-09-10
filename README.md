@@ -97,8 +97,8 @@ After the one-time Render/GitHub connection, normal development only needs a mer
 
 ## Combat and upgrades
 
-- Hydra kills award 5 minerals and Sunken destruction awards 200 minerals.
-- Neutral zones can be captured by an Overlord for 250 minerals with a strict Hydra lead.
+- Hydra kills award 5 minerals and Sunken destruction awards 150 minerals.
+- Neutral zones can be captured by an Overlord for 250 minerals when that player commands the strict most Any Unit count and no building occupies the 384x384 zone.
 - Click the `HD` building for one-time 100 mineral range/speed upgrades.
 - Click the `EV` building for 50 mineral attack/defense levels, capped at +255.
 - Defense +161 is the first level where a 40 HP Hydra survives the base 200-damage Sunken hit.

@@ -206,6 +206,7 @@ export function stepBeaconSystem(state, map, deltaMs) {
     sendZealotHome(state, map, zealot);
     events.push({
       type: 'beacon-rally',
+      ownerSlot,
       team: zealot.team,
       direction: pad.direction,
       targetZoneId: pad.targetZoneId,
