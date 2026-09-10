@@ -59,48 +59,48 @@
     </section>
 
     <section class="game-screen" id="gameScreen" hidden>
-      <div class="game-hud">
-        <span>Room <b id="gameRoomCode">----</b></span>
-        <span>Team <b id="gameTeam">-</b></span>
-        <span>Time <b id="gameTimer">00:00</b></span>
-        <span>Tick <b id="serverTick">0</b></span>
-        <span>RTT <b id="latency">-</b> ms</span>
-      </div>
+      <div class="battle-wrap">
+        <canvas id="battlefield" width="1280" height="720" aria-label="멀티플레이 전장"></canvas>
 
-      <div class="battle-layout">
-        <div class="battle-wrap">
-          <canvas id="battlefield" width="820" height="820" aria-label="멀티플레이 전장"></canvas>
-          <div class="match-overlay" id="matchOverlay" hidden>
-            <strong id="overlayTitle"></strong>
-            <span id="overlaySubtitle"></span>
+        <section class="hud-panel hud-top-left" aria-label="팀 현황">
+          <div class="eyebrow">TEAMS</div>
+          <div id="scoreboard" class="scoreboard"></div>
+        </section>
+
+        <section class="hud-panel hud-top-center" aria-label="경기 정보">
+          <span>ROOM <b id="gameRoomCode">----</b></span>
+          <span>TEAM <b id="gameTeam">-</b></span>
+          <span>TIME <b id="gameTimer">00:00</b></span>
+          <span>TICK <b id="serverTick">0</b></span>
+          <span>RTT <b id="latency">-</b> ms</span>
+        </section>
+
+        <section class="hud-panel hud-top-right" aria-label="업그레이드">
+          <div class="eyebrow">UPGRADES</div>
+          <div id="upgradeState" class="upgrade-state">A+0 / D+0 / R0 / S0</div>
+          <div class="upgrade-grid">
+            <button type="button" data-upgrade="attack">공격 +1 · 50</button>
+            <button type="button" data-upgrade="defense">방어 +1 · 50</button>
+            <button type="button" data-upgrade="range">사거리 · 100</button>
+            <button type="button" data-upgrade="speed">이속 · 100</button>
           </div>
-        </div>
+        </section>
 
-        <aside class="side-panel">
-          <section>
-            <div class="eyebrow">TEAMS</div>
-            <div id="scoreboard" class="scoreboard"></div>
-          </section>
-          <section>
-            <div class="eyebrow">SELECTION</div>
-            <div id="selectionInfo">선택 없음</div>
-            <p>좌클릭/드래그 선택 · 우클릭 이동. 명령은 위치가 아니라 서버로 전송됩니다.</p>
-          </section>
-          <section>
-            <div class="eyebrow">UPGRADES</div>
-            <div id="upgradeState" class="upgrade-state">A+0 / D+0 / R0 / S0</div>
-            <div class="upgrade-grid">
-              <button type="button" data-upgrade="attack">공격 +1 · 50</button>
-              <button type="button" data-upgrade="defense">방어 +1 · 50</button>
-              <button type="button" data-upgrade="range">사거리 · 100</button>
-              <button type="button" data-upgrade="speed">이속 · 100</button>
-            </div>
-          </section>
-          <section>
-            <div class="eyebrow">NETWORK</div>
-            <div id="networkStatus">서버 snapshot 대기 중</div>
-          </section>
-        </aside>
+        <section class="hud-panel hud-bottom-left" aria-label="선택 및 네트워크 상태">
+          <div class="eyebrow">SELECTION</div>
+          <div id="selectionInfo">선택 없음</div>
+          <div id="networkStatus">서버 snapshot 대기 중</div>
+        </section>
+
+        <section class="minimap-panel" aria-label="미니맵">
+          <canvas id="minimap" width="190" height="190"></canvas>
+          <span>CLICK TO MOVE CAMERA</span>
+        </section>
+
+        <div class="match-overlay" id="matchOverlay" hidden>
+          <strong id="overlayTitle"></strong>
+          <span id="overlaySubtitle"></span>
+        </div>
       </div>
     </section>
   </main>

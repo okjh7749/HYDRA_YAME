@@ -24,13 +24,19 @@ test('builds the 64x64 classic battlefield with 21 capture zones', () => {
   assert.equal(map.zones.filter((zone) => zone.ownerTeam !== null).length, 4);
 });
 
-test('keeps void tiles unwalkable while opening zones and corridors', () => {
+test('builds the blunt classic cross instead of a diagonal X silhouette', () => {
   const map = buildClassicMap();
 
   assert.equal(isWalkableTile(map, 0, 0), false);
-  assert.equal(isWalkableTile(map, 5, 5), true);
-  assert.equal(isWalkableTile(map, 12, 5), true);
+  assert.equal(isWalkableTile(map, 8, 8), false);
+  assert.equal(isWalkableTile(map, 20, 8), true);
+  assert.equal(isWalkableTile(map, 8, 20), true);
   assert.equal(isWalkableTile(map, 32, 32), true);
+  assert.equal(isWalkableTile(map, 55, 55), false);
+  assert.deepEqual(
+    map.zones.slice(0, 3).map((zone) => [zone.x, zone.y]),
+    [[640, 256], [1024, 256], [1408, 256]],
+  );
 });
 
 test('snaps invalid world targets to the nearest valid movement tile', () => {
