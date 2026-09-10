@@ -10,6 +10,7 @@ test('Render blueprint deploys main automatically and starts the WebSocket serve
 
   assert.match(config, /type: web/);
   assert.match(config, /runtime: node/);
+  assert.match(config, /plan: free/);
   assert.match(config, /branch: main/);
   assert.match(config, /startCommand: node src\/dev-server\.mjs/);
   assert.match(config, /healthCheckPath: \/healthz/);
