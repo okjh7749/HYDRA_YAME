@@ -4,6 +4,7 @@ import {
   SNAPSHOT_INTERPOLATION_MS,
   interpolateUnitPose,
 } from '/src/game-visuals.mjs';
+import { isUnitMoving } from '/src/rts-visual-layout.mjs';
 import {
   drawIndustrialTerrain,
   drawMoveMarker,
@@ -11,7 +12,7 @@ import {
   drawRtsEffects,
   drawRtsSunken,
   drawRtsUnit,
-} from '/public/rts-render.mjs';
+} from '/public/rts-render-v2.mjs';
 
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
 const map = buildClassicMap();
@@ -317,7 +318,13 @@ function interpolatedUnits() {
   if (!snapshot || !previousSnapshot) return snapshot?.units ?? [];
   const previousById = new Map(previousSnapshot.units.map((unit) => [unit.id, unit]));
   const alpha = Math.min(1, Math.max(0, (visualFrameTime - snapshotReceivedAt) / SNAPSHOT_INTERPOLATION_MS));
-  return snapshot.units.map((unit) => interpolateUnitPose(previousById.get(unit.id), unit, alpha));
+  return snapshot.units.map((unit) => {
+    const previous = previousById.get(unit.id);
+    return {
+      ...interpolateUnitPose(previous, unit, alpha),
+      moving: isUnitMoving(previous, unit),
+    };
+  });
 }
 
 function drawTerrain() {
@@ -364,6 +371,7 @@ function drawZones() {
         y: sunken.y,
         scale: CAMERA_ZOOM,
         teamColor: teamColors[zone.ownerTeam],
+        timeMs: visualFrameTime,
       });
     }
   }
@@ -400,6 +408,7 @@ function drawUnit(unit) {
     selected: selectedIds.has(unit.id),
     teamColor: teamColors[unit.team],
     timeMs: visualFrameTime,
+    moving: unit.moving,
   });
 }
 

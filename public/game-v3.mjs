@@ -42,10 +42,10 @@ import { stepFormationMovement } from '/src/game-formation.mjs';
 import { playerHydraCount } from '/src/game-ownership.mjs';
 import {
   drawIndustrialTerrain,
+  drawRtsBeacon,
   drawRtsSunken,
   drawRtsUnit,
-} from '/public/rts-render.mjs';
-import { drawBeaconPads, drawZealot } from '/public/beacon-render.mjs';
+} from '/public/rts-render-v2.mjs';
 
 const LOCAL_TEAM = 0;
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
@@ -168,7 +168,7 @@ function drawTerrain() {
 
 function drawSunken(zone, x, y, color, visible) {
   if (!visible || zone.sunkenHp <= 0) return;
-  drawRtsSunken(ctx, zone, { x, y, scale: 1, teamColor: color });
+  drawRtsSunken(ctx, zone, { x, y, scale: 1, teamColor: color, timeMs: performance.now() });
 }
 
 function drawZones() {
@@ -270,6 +270,7 @@ function drawHydra(unit, selected) {
     selected,
     teamColor: teamColors[unit.team],
     timeMs: performance.now(),
+    moving: unit.pathIndex < unit.path.length,
   });
 }
 
@@ -281,11 +282,25 @@ function drawOverlord(unit, selected) {
     selected,
     teamColor: teamColors[unit.team],
     timeMs: performance.now(),
+    moving: unit.pathIndex < unit.path.length,
   });
 }
 
 function unitIsVisible(unit) {
   return unit.team === LOCAL_TEAM || pointVisible(unit.x, unit.y);
+}
+
+function drawClassicBeacons() {
+  const timeMs = performance.now();
+  for (const pad of beaconPadsForTeam(simulation, LOCAL_TEAM)) {
+    if (!visibleWorldPoint(pad.x, pad.y, 40)) continue;
+    drawRtsBeacon(ctx, pad, {
+      x: pad.x - camera.x,
+      y: pad.y - camera.y,
+      scale: 1,
+      timeMs,
+    });
+  }
 }
 
 function drawUnits() {
@@ -294,7 +309,17 @@ function drawUnits() {
     const selected = selectedIds.has(unit.id);
     if (unit.type === 'hydra') drawHydra(unit, selected);
     else if (unit.type === 'overlord') drawOverlord(unit, selected);
-    else if (unit.type === 'zealot') drawZealot(ctx, unit, selected, camera, teamColors);
+    else if (unit.type === 'zealot') {
+      drawRtsUnit(ctx, unit, {
+        x: unit.x - camera.x,
+        y: unit.y - camera.y,
+        scale: 1,
+        selected,
+        teamColor: teamColors[unit.team],
+        timeMs: performance.now(),
+        moving: unit.pathIndex < unit.path.length,
+      });
+    }
   }
 }
 
@@ -550,7 +575,7 @@ function render(forceMinimap = false) {
   visionSources = getVisionSources(simulation, map, LOCAL_TEAM);
   drawTerrain();
   drawZones();
-  drawBeaconPads(ctx, beaconPadsForTeam(simulation, LOCAL_TEAM), camera, visibleWorldPoint);
+  drawClassicBeacons();
   drawUpgradeBuildings();
   drawUnits();
   drawCombatEffects();
