@@ -7,6 +7,7 @@ import {
   matchTeamRows,
   stepMatchClock,
 } from '/src/game-match.mjs';
+import { unitOwnerSlot } from '/src/game-ownership.mjs';
 import { renderMatchOverlay, renderTeamBoard } from '/public/match-ui.mjs';
 
 const runtime = window.__hydraGame;
@@ -46,18 +47,18 @@ function cleanupEliminatedArtifacts() {
   const eliminated = new Set(
     simulation.players
       .filter((player) => player.status === 'eliminated')
-      .map((player) => player.team),
+      .map((player) => player.slot),
   );
   if (simulation.match.phase === 'finished') {
     for (const unit of simulation.units) {
-      if (unit.type === 'overlord' && unit.team === LOCAL_TEAM) unit.hp = 0;
+      if (unit.type === 'overlord' && unitOwnerSlot(unit) === simulation.localPlayerSlot) unit.hp = 0;
     }
   }
   simulation.units = simulation.units.filter(
-    (unit) => unit.hp > 0 && !eliminated.has(unit.team),
+    (unit) => unit.hp > 0 && !eliminated.has(unitOwnerSlot(unit)),
   );
   for (const building of simulation.upgradeBuildings ?? []) {
-    if (eliminated.has(building.team)) building.hp = 0;
+    if (eliminated.has(building.ownerSlot)) building.hp = 0;
   }
   if (simulation.match.localMode === 'spectating') selectedIds.clear();
 }

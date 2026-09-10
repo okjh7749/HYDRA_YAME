@@ -2,6 +2,7 @@ import {
   HYDRA_SPEED,
   HYDRA_SPEED_UPGRADE_MULTIPLIER,
 } from './game-simulation.mjs';
+import { playerBySlot, unitOwnerSlot } from './game-ownership.mjs';
 
 export const UPGRADE_BUILDING_HP = 9999;
 
@@ -41,8 +42,8 @@ const BUILDING_LAYOUT = Object.freeze([
   Object.freeze({ type: 'evolution', label: 'Evolution Chamber', shortLabel: 'EV', dx: 52, dy: 52 }),
 ]);
 
-function playerForTeam(state, team) {
-  return state.players?.find((player) => player.team === team) ?? null;
+function playerForSlot(state, ownerSlot) {
+  return playerBySlot(state, ownerSlot);
 }
 
 function distanceSquared(a, b) {
@@ -58,10 +59,11 @@ export function initializeUpgradeBuildings(state) {
   for (const player of state.players ?? []) {
     for (const layout of BUILDING_LAYOUT) {
       state.upgradeBuildings.push({
-        id: `upgrade-${player.team}-${layout.type}`,
+        id: `upgrade-${player.slot}-${layout.type}`,
         type: layout.type,
         label: layout.label,
         shortLabel: layout.shortLabel,
+        ownerSlot: player.slot,
         team: player.team,
         x: player.homeX + layout.dx,
         y: player.homeY + layout.dy,
@@ -78,13 +80,13 @@ export function getUpgradeBuilding(state, buildingId) {
   return state.upgradeBuildings?.find((building) => building.id === buildingId) ?? null;
 }
 
-export function nearestUpgradeBuilding(state, team, point, radius = 34) {
+export function nearestUpgradeBuilding(state, ownerSlot, point, radius = 34) {
   const radiusSquared = radius * radius;
   let best = null;
   let bestDistance = Number.POSITIVE_INFINITY;
 
   for (const building of state.upgradeBuildings ?? []) {
-    if (building.hp <= 0 || (team !== null && building.team !== team)) continue;
+    if (building.hp <= 0 || (ownerSlot !== null && building.ownerSlot !== ownerSlot)) continue;
     const distance = distanceSquared(building, point);
     if (distance <= radiusSquared && distance < bestDistance) {
       best = building;
@@ -102,30 +104,30 @@ export function upgradeOptionsForBuilding(building) {
   );
 }
 
-export function upgradeLevel(state, team, upgradeKey) {
-  return playerForTeam(state, team)?.upgrades?.[upgradeKey] ?? 0;
+export function upgradeLevel(state, ownerSlot, upgradeKey) {
+  return playerForSlot(state, ownerSlot)?.upgrades?.[upgradeKey] ?? 0;
 }
 
-function applySpeedUpgradeToExistingHydras(state, team) {
-  const multiplier = upgradeLevel(state, team, 'speed') > 0
+function applySpeedUpgradeToExistingHydras(state, ownerSlot) {
+  const multiplier = upgradeLevel(state, ownerSlot, 'speed') > 0
     ? HYDRA_SPEED_UPGRADE_MULTIPLIER
     : 1;
   for (const unit of state.units) {
-    if (unit.type === 'hydra' && unit.team === team) {
+    if (unit.type === 'hydra' && unitOwnerSlot(unit) === ownerSlot) {
       unit.speed = HYDRA_SPEED * multiplier;
     }
   }
 }
 
-export function purchaseUpgrade(state, team, buildingId, upgradeKey) {
-  const player = playerForTeam(state, team);
+export function purchaseUpgrade(state, ownerSlot, buildingId, upgradeKey) {
+  const player = playerForSlot(state, ownerSlot);
   const building = getUpgradeBuilding(state, buildingId);
   const definition = UPGRADE_DEFINITIONS[upgradeKey];
 
   if (!player || !building || !definition) {
     return { ok: false, reason: 'invalid-upgrade' };
   }
-  if (building.team !== team || building.hp <= 0) {
+  if (building.ownerSlot !== ownerSlot || building.hp <= 0) {
     return { ok: false, reason: 'not-owned' };
   }
   if (definition.buildingType !== building.type) {
@@ -142,7 +144,7 @@ export function purchaseUpgrade(state, team, buildingId, upgradeKey) {
 
   player.minerals -= definition.cost;
   player.upgrades[upgradeKey] = currentLevel + 1;
-  if (upgradeKey === 'speed') applySpeedUpgradeToExistingHydras(state, team);
+  if (upgradeKey === 'speed') applySpeedUpgradeToExistingHydras(state, ownerSlot);
 
   return {
     ok: true,
@@ -153,11 +155,11 @@ export function purchaseUpgrade(state, team, buildingId, upgradeKey) {
   };
 }
 
-export function upgradeButtonState(state, team, building, upgradeKey) {
+export function upgradeButtonState(state, ownerSlot, building, upgradeKey) {
   const definition = UPGRADE_DEFINITIONS[upgradeKey];
-  const player = playerForTeam(state, team);
-  const level = upgradeLevel(state, team, upgradeKey);
-  const owned = Boolean(building && building.team === team && building.hp > 0);
+  const player = playerForSlot(state, ownerSlot);
+  const level = upgradeLevel(state, ownerSlot, upgradeKey);
+  const owned = Boolean(building && building.ownerSlot === ownerSlot && building.hp > 0);
   const compatible = Boolean(definition && building && definition.buildingType === building.type);
   const maxed = Boolean(definition && level >= definition.max);
   const affordable = Boolean(player && definition && player.minerals >= definition.cost);

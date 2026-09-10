@@ -12,12 +12,15 @@ import {
   initializeCombatState,
   stepCapture,
   stepCombat,
+  stepPlayerTriggerEconomy,
+  ensureLocalOverlord,
 } from '../src/game-combat.mjs';
 import {
   HYDRA_SPAWN_INTERVAL_MS,
   createSimulation,
   stepProduction,
 } from '../src/game-simulation.mjs';
+import { initializeUpgradeBuildings } from '../src/game-upgrades.mjs';
 
 function setup() {
   const map = buildClassicMap();
@@ -33,17 +36,21 @@ test('initializes classic combat stats and 1000 minerals', () => {
   assert.equal(player.minerals, 1000);
   assert.equal(player.kills, 0);
   assert.equal(controlledZoneCount(map, 0), 1);
-  assert.equal(map.zones[0].sunkenHp, SUNKEN_HP);
+  const localHome = map.zones.find((zone) => zone.ownerSlot === 0);
+  assert.ok(localHome);
+  assert.equal(localHome.sunkenHp, SUNKEN_HP);
 });
 
 test('hydras deal damage automatically and award 5 minerals for a hydra kill', () => {
   const { map, state } = setup();
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
 
-  const attacker = state.units.find((unit) => unit.type === 'hydra' && unit.team === 0);
-  const defender = state.units.find((unit) => unit.type === 'hydra' && unit.team === 1);
-  attacker.x = map.zones[16].x;
-  attacker.y = map.zones[16].y;
+  const attacker = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
+  const defender = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 2);
+  const arena = map.zones.find((zone) => zone.ownerSlot === null);
+  state.units = [attacker, defender];
+  attacker.x = arena.x;
+  attacker.y = arena.y;
   defender.x = attacker.x + 40;
   defender.y = attacker.y;
   const before = getPlayerState(state, 0).minerals;
@@ -59,12 +66,13 @@ test('an early sunken one-shots an unupgraded hydra and earns the kill reward', 
   const { map, state } = setup();
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
 
-  const invader = state.units.find((unit) => unit.type === 'hydra' && unit.team === 1);
-  const localHydra = state.units.find((unit) => unit.type === 'hydra' && unit.team === 0);
+  const invader = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 2);
+  const localHydra = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
   localHydra.x = map.zones[16].x;
   localHydra.y = map.zones[16].y;
-  invader.x = map.zones[0].x + 50;
-  invader.y = map.zones[0].y;
+  const localHome = map.zones.find((zone) => zone.ownerSlot === 0);
+  invader.x = localHome.x + 50;
+  invader.y = localHome.y;
   const before = getPlayerState(state, 0).minerals;
 
   stepCombat(state, map, 1);
@@ -77,8 +85,8 @@ test('destroying a sunken neutralizes its zone and awards 200 minerals', () => {
   const { map, state } = setup();
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
 
-  const attacker = state.units.find((unit) => unit.type === 'hydra' && unit.team === 0);
-  const enemyZone = map.zones[2];
+  const attacker = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
+  const enemyZone = map.zones.find((zone) => zone.ownerSlot === 2);
   enemyZone.sunkenHp = 1;
   attacker.x = enemyZone.x + 40;
   attacker.y = enemyZone.y;
@@ -97,9 +105,9 @@ test('overlord captures a neutral zone only with a strict hydra lead and pays 25
   const { map, state } = setup();
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
 
-  const zone = map.zones[12];
-  const overlord = state.units.find((unit) => unit.type === 'overlord' && unit.team === 0);
-  const hydra = state.units.find((unit) => unit.type === 'hydra' && unit.team === 0);
+  const zone = map.zones.find((candidate) => candidate.ownerSlot === null);
+  const overlord = state.units.find((unit) => unit.type === 'overlord' && unit.ownerSlot === 0);
+  const hydra = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
   state.units = [overlord, hydra];
   overlord.x = zone.x;
   overlord.y = zone.y;
@@ -109,33 +117,87 @@ test('overlord captures a neutral zone only with a strict hydra lead and pays 25
 
   const captures = stepCapture(state, map);
 
-  assert.deepEqual(captures, [{ zoneId: zone.id, team: 0 }]);
+  assert.equal(captures.length, 1);
+  assert.equal(captures[0].zoneId, zone.id);
+  assert.equal(captures[0].ownerSlot, 0);
+  assert.equal(captures[0].team, 0);
+  assert.deepEqual(new Set(captures[0].removedIds), new Set([overlord.id, hydra.id]));
+  assert.equal(zone.ownerSlot, 0);
   assert.equal(zone.ownerTeam, 0);
   assert.equal(zone.sunkenHp, SUNKEN_HP);
   assert.equal(getPlayerState(state, 0).minerals, before - CAPTURE_COST);
   assert.equal(getPlayerState(state, 0).captures, 1);
   assert.equal(state.units.some((unit) => unit.id === overlord.id), false);
-  assert.equal(state.units.some((unit) => unit.type === 'overlord' && unit.team === 0), true);
+  assert.equal(state.units.some((unit) => unit.type === 'overlord' && unit.ownerSlot === 0), false);
 });
 
-test('a tied hydra count prevents capture and does not spend minerals', () => {
+test('a tied Any Unit count prevents capture and does not spend minerals', () => {
   const { map, state } = setup();
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
+  stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
 
-  const zone = map.zones[12];
-  const overlord = state.units.find((unit) => unit.type === 'overlord' && unit.team === 0);
-  const localHydra = state.units.find((unit) => unit.type === 'hydra' && unit.team === 0);
-  const enemyHydra = state.units.find((unit) => unit.type === 'hydra' && unit.team === 1);
-  state.units = [overlord, localHydra, enemyHydra];
+  const zone = map.zones.find((candidate) => candidate.ownerSlot === null);
+  const overlord = state.units.find((unit) => unit.type === 'overlord' && unit.ownerSlot === 0);
+  const localHydra = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
+  const enemyHydras = state.units
+    .filter((unit) => unit.type === 'hydra' && unit.ownerSlot === 2)
+    .slice(0, 2);
+  assert.equal(enemyHydras.length, 2);
+  state.units = [overlord, localHydra, ...enemyHydras];
   overlord.x = zone.x;
   overlord.y = zone.y;
   localHydra.x = zone.x + 10;
   localHydra.y = zone.y;
-  enemyHydra.x = zone.x - 10;
-  enemyHydra.y = zone.y;
+  enemyHydras[0].x = zone.x - 10;
+  enemyHydras[0].y = zone.y;
+  enemyHydras[1].x = zone.x - 20;
+  enemyHydras[1].y = zone.y;
   const before = getPlayerState(state, 0).minerals;
 
   assert.deepEqual(stepCapture(state, map), []);
   assert.equal(zone.ownerTeam, null);
   assert.equal(getPlayerState(state, 0).minerals, before);
+});
+
+test('overlord threshold and recovery triggers are isolated per player slot', () => {
+  const { map, state } = setup();
+  initializeUpgradeBuildings(state);
+  stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
+
+  const player = getPlayerState(state, 0);
+  const teammate = getPlayerState(state, 1);
+  const teammateOverlord = ensureLocalOverlord(state, map, 1);
+  assert.ok(teammateOverlord);
+
+  player.minerals = 249;
+  const lowMineral = stepPlayerTriggerEconomy(state, map, 0, 0);
+  assert.equal(lowMineral.overlordsKilled, 1);
+  assert.equal(state.units.some((unit) => unit.type === 'overlord' && unit.ownerSlot === 0), false);
+  assert.equal(state.units.some((unit) => unit.id === teammateOverlord.id), true);
+  assert.equal(teammate.minerals, 1000);
+
+  const localHome = map.zones.find((zone) => zone.ownerSlot === 0);
+  localHome.ownerSlot = null;
+  localHome.ownerTeam = null;
+  localHome.sunkenHp = 0;
+  state.match = { phase: 'running', elapsedMs: 1000 };
+  const recovery = stepPlayerTriggerEconomy(state, map, 0, 0);
+
+  assert.equal(recovery.recoveredMinerals, 250);
+  assert.equal(player.minerals, 499);
+  assert.equal(recovery.overlordCreated, false);
+  assert.equal(recovery.buildingsRemoved, 2);
+  const afterRecovery = stepPlayerTriggerEconomy(state, map, 0, 0);
+  assert.equal(afterRecovery.recoveredMinerals, 0);
+  assert.equal(afterRecovery.overlordCreated, true);
+  assert.equal(player.minerals, 499);
+  assert.equal(state.units.some((unit) => unit.type === 'overlord' && unit.ownerSlot === 0), true);
+  assert.equal(
+    state.upgradeBuildings.filter((building) => building.ownerSlot === 0).every((building) => building.hp === 0),
+    true,
+  );
+  assert.equal(
+    state.upgradeBuildings.filter((building) => building.ownerSlot === 1).every((building) => building.hp > 0),
+    true,
+  );
 });

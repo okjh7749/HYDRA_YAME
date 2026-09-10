@@ -32,7 +32,7 @@ test('creates one selectable beacon zealot and eight directional pads for every 
   const { state } = setup();
 
   const zealots = state.units.filter((unit) => unit.type === 'zealot' && unit.beaconController);
-  assert.equal(zealots.length, 4);
+  assert.equal(zealots.length, 8);
   assert.equal(state.beaconPads.length, 32);
 
   const localPads = beaconPadsForTeam(state, 0);

@@ -1,3 +1,12 @@
+import {
+  FORCE_COUNT,
+  forceIsAlive,
+  playerHydraCount,
+  playerSunkenCount,
+  unitOwnerSlot,
+  zoneOwnerSlot,
+} from './game-ownership.mjs';
+
 export const DEFAULT_MATCH_COUNTDOWN_MS = 3000;
 
 function teamHydraCount(state, team) {
@@ -14,10 +23,10 @@ function teamSunkenCount(map, team) {
   ).length;
 }
 
-function eliminateTeamArtifacts(state, team) {
-  state.units = (state.units ?? []).filter((unit) => unit.team !== team);
+function eliminatePlayerArtifacts(state, ownerSlot) {
+  state.units = (state.units ?? []).filter((unit) => unitOwnerSlot(unit) !== ownerSlot);
   for (const building of state.upgradeBuildings ?? []) {
-    if (building.team === team) building.hp = 0;
+    if (building.ownerSlot === ownerSlot) building.hp = 0;
   }
 }
 
@@ -73,7 +82,7 @@ export function stepMatchClock(state, map, deltaMs) {
 }
 
 export function teamIsAlive(state, map, team) {
-  return teamHydraCount(state, team) > 0 || teamSunkenCount(map, team) > 0;
+  return forceIsAlive(state, map, team);
 }
 
 export function evaluateMatchState(state, map) {
@@ -82,27 +91,32 @@ export function evaluateMatchState(state, map) {
 
   const events = [];
   for (const player of state.players ?? []) {
-    if (player.status === 'eliminated' || teamIsAlive(state, map, player.team)) continue;
+    const alive = playerHydraCount(state, player.slot) > 0 || playerSunkenCount(map, player.slot) > 0;
+    if (player.status === 'eliminated' || alive) continue;
 
     player.status = 'eliminated';
     player.eliminatedAtMs = match.elapsedMs;
-    eliminateTeamArtifacts(state, player.team);
-    const event = { type: 'team-eliminated', team: player.team };
+    eliminatePlayerArtifacts(state, player.slot);
+    const event = { type: 'player-eliminated', slot: player.slot, team: player.team };
     pushMatchEvent(state, event);
     events.push(event);
-    if (player.team === state.localTeam) match.localMode = 'spectating';
+    if (player.slot === state.localPlayerSlot) match.localMode = 'spectating';
   }
 
-  const active = (state.players ?? []).filter((player) => player.status !== 'eliminated');
-  if (active.length === 1 && (state.players?.length ?? 0) > 1) {
+  const activeTeams = [];
+  for (let team = 0; team < FORCE_COUNT; team += 1) {
+    if (forceIsAlive(state, map, team)) activeTeams.push(team);
+  }
+
+  if (activeTeams.length === 1 && (state.players?.length ?? 0) > 1) {
     match.phase = 'finished';
-    match.winnerTeam = active[0].team;
-    match.result = active[0].team === state.localTeam ? 'victory' : 'defeat';
+    match.winnerTeam = activeTeams[0];
+    match.result = activeTeams[0] === state.localTeam ? 'victory' : 'defeat';
     if (match.result === 'defeat') match.localMode = 'spectating';
-    const event = { type: 'match-finished', winnerTeam: active[0].team };
+    const event = { type: 'match-finished', winnerTeam: activeTeams[0] };
     pushMatchEvent(state, event);
     events.push(event);
-  } else if (active.length === 0 && (state.players?.length ?? 0) > 0) {
+  } else if (activeTeams.length === 0 && (state.players?.length ?? 0) > 0) {
     match.phase = 'finished';
     match.winnerTeam = null;
     match.result = 'draw';
@@ -116,15 +130,18 @@ export function evaluateMatchState(state, map) {
 }
 
 export function matchTeamRows(state, map) {
-  return (state.players ?? []).map((player) => ({
-    team: player.team,
-    status: player.status ?? 'active',
-    zones: teamSunkenCount(map, player.team),
-    hydras: teamHydraCount(state, player.team),
-    minerals: player.minerals,
-    kills: player.kills,
-    captures: player.captures,
-  }));
+  return Array.from({ length: FORCE_COUNT }, (_, team) => {
+    const players = (state.players ?? []).filter((player) => player.team === team);
+    return {
+      team,
+      status: forceIsAlive(state, map, team) ? 'active' : 'eliminated',
+      zones: teamSunkenCount(map, team),
+      hydras: teamHydraCount(state, team),
+      minerals: players.reduce((sum, player) => sum + (player.minerals ?? 0), 0),
+      kills: players.reduce((sum, player) => sum + (player.kills ?? 0), 0),
+      captures: players.reduce((sum, player) => sum + (player.captures ?? 0), 0),
+    };
+  });
 }
 
 export function formatMatchTime(milliseconds) {

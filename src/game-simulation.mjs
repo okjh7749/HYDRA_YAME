@@ -1,4 +1,13 @@
-import { findPath, nearestWalkablePoint } from './game-core.mjs';
+import {
+  CLASSIC_ZONE_SPAN,
+  findPath,
+  nearestWalkablePoint,
+} from './game-core.mjs';
+import {
+  playerBySlot,
+  teamForSlot,
+  unitOwnerSlot,
+} from './game-ownership.mjs';
 
 export const HYDRA_SPAWN_INTERVAL_MS = 500;
 export const HYDRA_HP = 40;
@@ -29,13 +38,14 @@ function createHydra(state, map, zone) {
   const unit = {
     id: state.nextUnitId,
     type: 'hydra',
-    team: zone.ownerTeam,
+    ownerSlot: zone.ownerSlot,
+    team: teamForSlot(zone.ownerSlot),
     x: spawnPoint.x,
     y: spawnPoint.y,
     hp: HYDRA_HP,
     maxHp: HYDRA_HP,
     speed: HYDRA_SPEED * (
-      (state.players?.find((player) => player.team === zone.ownerTeam)?.upgrades?.speed ?? 0) > 0
+      (playerBySlot(state, zone.ownerSlot)?.upgrades?.speed ?? 0) > 0
         ? HYDRA_SPEED_UPGRADE_MULTIPLIER : 1),
     visionRadius: HYDRA_VISION_RADIUS,
     path: [],
@@ -49,23 +59,26 @@ function createHydra(state, map, zone) {
   return unit;
 }
 
-export function createSimulation(map, { localTeam = 0 } = {}) {
+export function createSimulation(map, { localTeam = 0, localPlayerSlot = localTeam * 2 } = {}) {
+  const localForce = teamForSlot(localPlayerSlot);
   const state = {
-    localTeam,
+    localTeam: localForce,
+    localPlayerSlot,
     nextUnitId: 1,
     units: [],
     spawnAccumulators: new Map(),
     spawnSequence: new Map(),
   };
 
-  const startZone = map.zones.find((zone) => zone.ownerTeam === localTeam) ?? map.zones[0];
+  const startZone = map.zones.find((zone) => zone.ownerSlot === localPlayerSlot) ?? map.zones[0];
   const overlordPoint = nearestWalkablePoint(map, startZone.x + 54, startZone.y - 32, 8)
     ?? { x: startZone.x, y: startZone.y };
 
   state.units.push({
     id: state.nextUnitId,
     type: 'overlord',
-    team: localTeam,
+    ownerSlot: localPlayerSlot,
+    team: localForce,
     x: overlordPoint.x,
     y: overlordPoint.y,
     hp: 9999,
@@ -82,14 +95,27 @@ export function createSimulation(map, { localTeam = 0 } = {}) {
 }
 
 export function countHydrasNearZone(state, zone) {
-  const radiusSquared = zone.radius * zone.radius;
+  const halfSpan = CLASSIC_ZONE_SPAN / 2;
   let count = 0;
 
   for (const unit of state.units) {
-    if (unit.type !== 'hydra' || unit.team !== zone.ownerTeam) continue;
-    if (distanceSquared(unit, zone) <= radiusSquared) count += 1;
+    if (unit.type !== 'hydra' || unitOwnerSlot(unit) !== zone.ownerSlot) continue;
+    if (Math.abs(unit.x - zone.x) <= halfSpan && Math.abs(unit.y - zone.y) <= halfSpan) count += 1;
   }
 
+  return count;
+}
+
+function countMenNearZone(state, zone) {
+  const halfSpan = CLASSIC_ZONE_SPAN / 2;
+  let count = 0;
+  for (const unit of state.units) {
+    if (unit.hp <= 0 || unit.beaconController) continue;
+    if (unitOwnerSlot(unit) !== zone.ownerSlot) continue;
+    if (Math.abs(unit.x - zone.x) <= halfSpan && Math.abs(unit.y - zone.y) <= halfSpan) {
+      count += 1;
+    }
+  }
   return count;
 }
 
@@ -98,12 +124,12 @@ export function stepProduction(state, map, deltaMs) {
   const spawned = [];
 
   for (const zone of map.zones) {
-    if (zone.ownerTeam === null || zone.ownerTeam === undefined) continue;
+    if (!Number.isInteger(zone.ownerSlot)) continue;
 
     let accumulator = (state.spawnAccumulators.get(zone.id) ?? 0) + deltaMs;
     while (accumulator >= HYDRA_SPAWN_INTERVAL_MS) {
       accumulator -= HYDRA_SPAWN_INTERVAL_MS;
-      if (countHydrasNearZone(state, zone) < MAX_LOCAL_HYDRAS_PER_ZONE) {
+      if (countMenNearZone(state, zone) <= MAX_LOCAL_HYDRAS_PER_ZONE) {
         spawned.push(createHydra(state, map, zone));
       }
     }
@@ -174,7 +200,7 @@ export function assignMoveOrders(map, state, unitIds, targetWorld) {
   return ordered;
 }
 
-export function selectUnitsInRect(state, team, rect) {
+export function selectUnitsInRect(state, ownerSlot, rect) {
   const left = Math.min(rect.x1, rect.x2);
   const right = Math.max(rect.x1, rect.x2);
   const top = Math.min(rect.y1, rect.y2);
@@ -182,7 +208,7 @@ export function selectUnitsInRect(state, team, rect) {
   const result = [];
 
   for (const unit of state.units) {
-    if (unit.team !== team) continue;
+    if (unitOwnerSlot(unit) !== ownerSlot) continue;
     if (unit.x >= left && unit.x <= right && unit.y >= top && unit.y <= bottom) {
       result.push(unit.id);
     }
@@ -191,13 +217,13 @@ export function selectUnitsInRect(state, team, rect) {
   return result;
 }
 
-export function nearestSelectableUnit(state, team, point, radius = 22) {
+export function nearestSelectableUnit(state, ownerSlot, point, radius = 22) {
   const radiusSquared = radius * radius;
   let best = null;
   let bestDistance = Number.POSITIVE_INFINITY;
 
   for (const unit of state.units) {
-    if (unit.team !== team) continue;
+    if (unitOwnerSlot(unit) !== ownerSlot) continue;
     const distance = distanceSquared(unit, point);
     if (distance <= radiusSquared && distance < bestDistance) {
       best = unit;

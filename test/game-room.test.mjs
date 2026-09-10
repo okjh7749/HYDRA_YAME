@@ -56,7 +56,8 @@ test('host can start only after two players are ready', () => {
   assert.equal(result.ok, true);
   assert.deepEqual(result.teams, [0, 1]);
   assert.equal(room.state.match.phase, 'countdown');
-  assert.equal(room.state.players[2].status, 'eliminated');
+  assert.equal(room.state.players[1].status, 'eliminated');
+  assert.equal(room.state.players[2].status, 'active');
   assert.equal(room.map.zones.some((zone) => zone.ownerTeam === 2), false);
 });
 
@@ -89,8 +90,8 @@ test('server move command ignores enemy ids and moves only the callers team', ()
   const room = createTwoPlayerRoom();
   startAndAdvance(room);
 
-  const own = room.state.units.find((unit) => unit.type === 'hydra' && unit.team === 0);
-  const enemy = room.state.units.find((unit) => unit.type === 'hydra' && unit.team === 1);
+  const own = room.state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
+  const enemy = room.state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 2);
   assert.ok(own);
   assert.ok(enemy);
 
@@ -124,7 +125,7 @@ test('server validates and applies upgrades for the callers team', () => {
 
   const enemyBuilding = handleRoomCommand(room, 'host', {
     type: 'upgrade',
-    buildingId: 'upgrade-1-evolution',
+    buildingId: 'upgrade-2-evolution',
     upgradeKey: 'attack',
   });
   assert.equal(enemyBuilding.ok, false);
@@ -169,7 +170,7 @@ test('finished snapshots derive victory or defeat from each clients own team', (
   assert.equal(guestSnapshot.match.result, 'victory');
 });
 
-test('a team survives a teammate disconnect but is eliminated when its last client leaves', () => {
+test('disconnect eliminates only that player slot while its allied force can survive', () => {
   const room = createRoom({ id: 'leave', hostId: 'p0', hostName: 'P0' });
   for (let index = 1; index < 5; index += 1) {
     assert.equal(joinRoom(room, { clientId: `p${index}`, name: `P${index}` }).ok, true);
@@ -179,18 +180,50 @@ test('a team survives a teammate disconnect but is eliminated when its last clie
 
   const teammate = room.players.find((player) => player.id === 'p4');
   assert.equal(teammate.team, 0);
-  const teamZeroZone = room.map.zones.find((zone) => zone.ownerTeam === 0);
-  assert.ok(teamZeroZone);
+  const p0Zone = room.map.zones.find((zone) => zone.ownerSlot === 0);
+  const teammateZone = room.map.zones.find((zone) => zone.ownerSlot === 1);
+  assert.ok(p0Zone);
+  assert.ok(teammateZone);
 
   leaveRoom(room, 'p0');
-  assert.equal(room.state.players[0].status, 'active');
-  assert.equal(teamZeroZone.ownerTeam, 0);
+  assert.equal(room.state.players[0].status, 'eliminated');
+  assert.equal(room.state.players[1].status, 'active');
+  assert.equal(p0Zone.ownerTeam, null);
+  assert.equal(teammateZone.ownerTeam, 0);
+  assert.equal(room.status, 'running');
 
   leaveRoom(room, 'p4');
-  assert.equal(room.state.players[0].status, 'eliminated');
-  assert.equal(teamZeroZone.ownerTeam, null);
+  assert.equal(room.state.players[1].status, 'eliminated');
+  assert.equal(teammateZone.ownerTeam, null);
   assert.equal(
     room.state.units.some((unit) => unit.team === 0),
     false,
   );
+});
+
+test('server ownership validation does not let allied players co-control units', () => {
+  const room = createRoom({ id: 'ally', hostId: 'p0', hostName: 'P0' });
+  for (let index = 1; index < 5; index += 1) {
+    assert.equal(joinRoom(room, { clientId: `p${index}`, name: `P${index}` }).ok, true);
+  }
+  for (const player of room.players) setRoomReady(room, player.id, true);
+  assert.equal(startRoom(room, 'p0').ok, true);
+  for (let tick = 0; tick < 70; tick += 1) tickRoom(room, 50);
+
+  const own = room.state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
+  const ally = room.state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 1);
+  assert.ok(own);
+  assert.ok(ally);
+
+  const result = handleRoomCommand(room, 'p0', {
+    type: 'move',
+    unitIds: [own.id, ally.id],
+    x: room.map.zones[12].x,
+    y: room.map.zones[12].y,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.ordered, 1);
+  assert.equal(own.path.length > 0, true);
+  assert.equal(ally.path.length, 0);
 });

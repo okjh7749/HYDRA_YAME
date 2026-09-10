@@ -10,12 +10,20 @@ const ZONE_CENTERS = [
   [640, 1792], [1024, 1792], [1408, 1792],
 ];
 
-const STARTING_OWNERS = new Map([
-  [0, 0],
-  [2, 1],
-  [18, 2],
-  [20, 3],
+const STARTING_OWNER_SLOTS = new Map([
+  [0, 3],
+  [2, 4],
+  [3, 2],
+  [7, 5],
+  [13, 0],
+  [17, 6],
+  [18, 1],
+  [20, 7],
 ]);
+
+const LOCATION_IDS = [
+  6, 7, 8, 2, 10, 14, 15, 16, 3, 11, 17, 20, 21, 4, 12, 18, 19, 22, 13, 23, 24,
+];
 
 function indexOf(map, x, y) {
   return y * map.columns + x;
@@ -55,14 +63,17 @@ export function buildClassicMap() {
 
   for (const [zoneIndex, [x, y]] of ZONE_CENTERS.entries()) {
     fillWorldBlock(map, x, y);
+    const ownerSlot = STARTING_OWNER_SLOTS.get(zoneIndex) ?? null;
     map.zones.push({
       id: zoneIndex + 1,
+      locationId: LOCATION_IDS[zoneIndex],
       tileX: Math.floor(x / TILE_SIZE),
       tileY: Math.floor(y / TILE_SIZE),
       x,
       y,
       radius: 64,
-      ownerTeam: STARTING_OWNERS.get(zoneIndex) ?? null,
+      ownerSlot,
+      ownerTeam: ownerSlot === null ? null : Math.floor(ownerSlot / 2),
     });
   }
 

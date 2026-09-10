@@ -5,6 +5,7 @@ import {
   initializeCombatState,
   stepCapture,
   stepCombat,
+  stepPlayerTriggerEconomy,
 } from './game-combat.mjs';
 import { buildClassicMap } from './game-core.mjs';
 import { stepFormationMovement } from './game-formation.mjs';
@@ -24,6 +25,7 @@ import {
   initializeUpgradeBuildings,
   purchaseUpgrade,
 } from './game-upgrades.mjs';
+import { setZoneOwner, unitOwnerSlot, zoneOwnerSlot } from './game-ownership.mjs';
 
 export const MAX_ROOM_PLAYERS = 8;
 export const MIN_ROOM_PLAYERS = 2;
@@ -42,6 +44,10 @@ function teamForSlot(slot) {
 
 function activeTeams(room) {
   return new Set(room.players.filter((player) => player.connected).map((player) => player.team));
+}
+
+function activeSlots(room) {
+  return new Set(room.players.filter((player) => player.connected).map((player) => player.slot));
 }
 
 function nextOpenSlot(room) {
@@ -116,21 +122,21 @@ export function leaveRoom(room, clientId) {
   } else {
     player.connected = false;
     player.ready = false;
-    const teammateConnected = room.players.some(
-      (candidate) => candidate.id !== clientId
-        && candidate.team === player.team
-        && candidate.connected,
-    );
-    if (room.status === 'running' && !teammateConnected) {
+    if (room.status === 'running') {
       for (const zone of room.map.zones) {
-        if (zone.ownerTeam === player.team) {
-          zone.ownerTeam = null;
+        if (zoneOwnerSlot(zone) === player.slot) {
+          setZoneOwner(zone, null);
           zone.sunkenHp = 0;
         }
       }
-      room.state.units = room.state.units.filter((unit) => unit.team !== player.team);
+      room.state.units = room.state.units.filter((unit) => unitOwnerSlot(unit) !== player.slot);
       for (const building of room.state.upgradeBuildings ?? []) {
-        if (building.team === player.team) building.hp = 0;
+        if (building.ownerSlot === player.slot) building.hp = 0;
+      }
+      const gamePlayer = getPlayerState(room.state, player.slot);
+      if (gamePlayer) {
+        gamePlayer.status = 'eliminated';
+        gamePlayer.eliminatedAtMs = room.state.match?.elapsedMs ?? 0;
       }
       evaluateMatchState(room.state, room.map);
       if (room.state.match?.phase === 'finished') room.status = 'finished';
@@ -147,24 +153,25 @@ export function setRoomReady(room, clientId, ready) {
   return { ok: true, ready: player.ready };
 }
 
-function disableUnusedTeams(room) {
-  const teams = activeTeams(room);
+function disableUnusedPlayers(room) {
+  const slots = activeSlots(room);
   const { state, map } = room;
   for (const player of state.players) {
-    player.status = teams.has(player.team) ? 'active' : 'eliminated';
-    player.eliminatedAtMs = teams.has(player.team) ? null : 0;
+    player.status = slots.has(player.slot) ? 'active' : 'eliminated';
+    player.eliminatedAtMs = slots.has(player.slot) ? null : 0;
   }
   for (const zone of map.zones) {
-    if (zone.ownerTeam !== null && !teams.has(zone.ownerTeam)) {
-      zone.ownerTeam = null;
+    const ownerSlot = zoneOwnerSlot(zone);
+    if (ownerSlot !== null && !slots.has(ownerSlot)) {
+      setZoneOwner(zone, null);
       zone.sunkenHp = 0;
     }
   }
   for (const building of state.upgradeBuildings ?? []) {
-    if (!teams.has(building.team)) building.hp = 0;
+    if (!slots.has(building.ownerSlot)) building.hp = 0;
   }
   state.units = state.units.filter(
-    (unit) => teams.has(unit.team) && unit.type !== 'overlord',
+    (unit) => slots.has(unitOwnerSlot(unit)) && unit.type !== 'overlord',
   );
 }
 
@@ -177,7 +184,7 @@ export function startRoom(room, clientId) {
   const teams = new Set(connected.map((player) => player.team));
   if (teams.size < 2) return { ok: false, reason: 'need-two-teams' };
 
-  disableUnusedTeams(room);
+  disableUnusedPlayers(room);
   initializeMatchState(room.state, room.map, { countdownMs: 3000 });
   room.status = 'running';
   return { ok: true, teams: [...teams].sort() };
@@ -187,7 +194,7 @@ function playerForClient(room, clientId) {
   return room.players.find((player) => player.id === clientId) ?? null;
 }
 
-function commandableUnitIds(room, team, unitIds) {
+function commandableUnitIds(room, ownerSlot, unitIds) {
   const requested = new Set(
     Array.isArray(unitIds)
       ? unitIds.filter((id) => Number.isInteger(id)).slice(0, 512)
@@ -195,7 +202,7 @@ function commandableUnitIds(room, team, unitIds) {
   );
   return new Set(
     room.state.units
-      .filter((unit) => requested.has(unit.id) && unit.team === team && unit.hp > 0)
+      .filter((unit) => requested.has(unit.id) && unitOwnerSlot(unit) === ownerSlot && unit.hp > 0)
       .map((unit) => unit.id),
   );
 }
@@ -206,7 +213,7 @@ export function handleRoomCommand(room, clientId, command) {
   if (room.status !== 'running' || room.state.match?.phase !== 'running') {
     return { ok: false, reason: 'match-not-running' };
   }
-  if (getPlayerState(room.state, player.team)?.status === 'eliminated') {
+  if (getPlayerState(room.state, player.slot)?.status === 'eliminated') {
     return { ok: false, reason: 'eliminated' };
   }
   if (!command || typeof command !== 'object') return { ok: false, reason: 'invalid-command' };
@@ -217,7 +224,7 @@ export function handleRoomCommand(room, clientId, command) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       return { ok: false, reason: 'invalid-target' };
     }
-    const ids = commandableUnitIds(room, player.team, command.unitIds);
+    const ids = commandableUnitIds(room, player.slot, command.unitIds);
     if (ids.size === 0) return { ok: false, reason: 'no-commandable-units' };
     const ordered = assignMoveOrders(room.map, room.state, ids, { x, y });
     return { ok: ordered > 0, type: 'move', ordered };
@@ -226,7 +233,7 @@ export function handleRoomCommand(room, clientId, command) {
   if (command.type === 'upgrade') {
     const result = purchaseUpgrade(
       room.state,
-      player.team,
+      player.slot,
       String(command.buildingId ?? ''),
       String(command.upgradeKey ?? ''),
     );
@@ -243,12 +250,12 @@ function tickRunningSimulation(room, deltaMs) {
   stepBeaconSystem(state, map, deltaMs);
   stepCombat(state, map, deltaMs);
 
-  const teams = activeTeams(room);
-  for (const team of teams) {
-    const gamePlayer = getPlayerState(state, team);
+  for (const roomPlayer of room.players) {
+    if (!roomPlayer.connected) continue;
+    const gamePlayer = getPlayerState(state, roomPlayer.slot);
     if (!gamePlayer || gamePlayer.status === 'eliminated') continue;
-    stepCapture(state, map, team);
-    ensureLocalOverlord(state, map, team);
+    stepCapture(state, map, roomPlayer.slot);
+    stepPlayerTriggerEconomy(state, map, roomPlayer.slot, deltaMs);
   }
   evaluateMatchState(state, map);
 }
@@ -288,6 +295,7 @@ function serializeUnit(unit) {
   return {
     id: unit.id,
     type: unit.type,
+    ownerSlot: unitOwnerSlot(unit),
     team: unit.team,
     x: Math.round(unit.x * 10) / 10,
     y: Math.round(unit.y * 10) / 10,
@@ -299,8 +307,8 @@ function serializeUnit(unit) {
 
 function spectatorFor(room, roomPlayer) {
   if (!roomPlayer || room.status === 'lobby') return false;
-  const teamState = getPlayerState(room.state, roomPlayer.team);
-  return teamState?.status === 'eliminated' || room.state.match?.phase === 'finished';
+  const playerState = getPlayerState(room.state, roomPlayer.slot);
+  return playerState?.status === 'eliminated' || room.state.match?.phase === 'finished';
 }
 
 function visibleToTeam(room, team, x, y, fullVision) {
@@ -341,6 +349,7 @@ export function snapshotForClient(room, clientId) {
       y: zone.y,
       radius: zone.radius,
       visible,
+      ownerSlot: visible ? zoneOwnerSlot(zone) : null,
       ownerTeam: visible ? zone.ownerTeam : null,
       sunkenHp: visible ? Math.max(0, Math.ceil(zone.sunkenHp ?? 0)) : null,
       sunkenMaxHp: visible ? (zone.sunkenMaxHp ?? 0) : null,
@@ -373,6 +382,7 @@ export function snapshotForClient(room, clientId) {
       slot: roomPlayer.slot,
       team,
       spectator: fullVision,
+      minerals: getPlayerState(room.state, roomPlayer.slot)?.minerals ?? 0,
     },
     match: {
       ...room.state.match,
@@ -384,7 +394,7 @@ export function snapshotForClient(room, clientId) {
       events: room.state.match.events.slice(-8),
     },
     teams: teamRowsForClient(room, team, fullVision),
-    upgrades: { ...(getPlayerState(room.state, team)?.upgrades ?? {}) },
+    upgrades: { ...(getPlayerState(room.state, roomPlayer.slot)?.upgrades ?? {}) },
     units,
     zones,
     beacons,
