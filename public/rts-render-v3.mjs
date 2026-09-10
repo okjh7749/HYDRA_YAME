@@ -153,23 +153,40 @@ function drawSunkenStrike(ctx, effect, camera, zoom) {
   const start = point(camera, zoom, effect.x1, effect.y1);
   const end = point(camera, zoom, effect.x2, effect.y2);
   const progress = projectileProgress(effect);
+  const segments = 7;
   ctx.save();
-  ctx.globalAlpha = 0.82;
-  ctx.strokeStyle = '#d77b52';
-  ctx.shadowColor = '#a84028';
-  ctx.shadowBlur = 3 * zoom;
-  ctx.lineWidth = Math.max(1.5, 1.8 * zoom);
-  ctx.beginPath();
-  const segments = 6;
-  for (let index = 0; index <= segments; index += 1) {
+  ctx.strokeStyle = '#4b1f1c';
+  ctx.fillStyle = '#9a4d36';
+  ctx.shadowColor = '#7b2b1f';
+  ctx.shadowBlur = 2 * zoom;
+
+  for (let index = 1; index <= segments; index += 1) {
     const t = index / segments;
-    const jitter = Math.sin((index + progress * 4) * Math.PI) * 1.8 * zoom;
+    const activation = Math.max(0, Math.min(1, progress * 1.35 - t * 0.78));
+    if (activation <= 0) continue;
     const x = start.x + (end.x - start.x) * t;
-    const y = start.y + (end.y - start.y) * t + jitter;
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+    const y = start.y + (end.y - start.y) * t;
+    const height = (4 + 13 * Math.sin(activation * Math.PI)) * zoom;
+    const halfWidth = (1.5 + 1.8 * activation) * zoom;
+    ctx.globalAlpha = 0.35 + activation * 0.65;
+    ctx.beginPath();
+    ctx.moveTo(x - halfWidth, y + 2 * zoom);
+    ctx.lineTo(x, y - height);
+    ctx.lineTo(x + halfWidth, y + 2 * zoom);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   }
-  ctx.stroke();
+
+  if (progress > 0.78) {
+    const impact = (progress - 0.78) / 0.22;
+    ctx.globalAlpha = 1 - impact;
+    ctx.strokeStyle = '#d18a63';
+    ctx.lineWidth = Math.max(1, zoom);
+    ctx.beginPath();
+    ctx.ellipse(end.x, end.y + 2 * zoom, (5 + impact * 8) * zoom, (2 + impact * 3) * zoom, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
