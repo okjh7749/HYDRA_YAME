@@ -48,7 +48,7 @@ import {
   drawRtsUnit,
 } from '/public/rts-render-v3.mjs';
 import { combatShakeOffset, minimapUnitRadius } from '/src/rts-feel.mjs';
-import { playCombatImpact, primeRtsAudio } from '/public/rts-audio.mjs';
+import { playCombatImpact, playUiCue, primeRtsAudio } from '/public/rts-audio.mjs';
 
 const LOCAL_TEAM = 0;
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
@@ -599,6 +599,7 @@ function selectFromDrag() {
       y2: endWorld.y,
     })) selectedIds.add(id);
   }
+  if (selectedIds.size > 0) playUiCue('select');
   updateHud();
 }
 
@@ -610,6 +611,7 @@ function issueMoveCommand(screenX, screenY) {
   }
   const target = screenToWorld(screenX, screenY);
   const ordered = assignMoveOrders(map, simulation, selectedIds, target);
+  if (ordered > 0) playUiCue('move');
   transientStatus = ordered > 0
     ? `${ordered}개 유닛 이동 명령 · 적과 접촉하면 자동 공격합니다.`
     : '이동 실패 · 연결된 통로가 없는 위치입니다.';
@@ -660,6 +662,7 @@ for (const button of upgradePanelNode.querySelectorAll('button[data-upgrade]')) 
     const key = button.dataset.upgrade;
     const result = purchaseUpgrade(simulation, simulation.localPlayerSlot, building.id, key);
     if (result.ok) {
+      playUiCue('upgrade');
       const definition = UPGRADE_DEFINITIONS[key];
       transientStatus = `${definition.label} 업그레이드 완료 · 현재 ${result.level}/${definition.max} · -${result.cost} 미네랄`;
       transientStatusMs = 1500;

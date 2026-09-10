@@ -105,6 +105,10 @@ function pathVelocity(unit, deltaSeconds) {
     return { x: 0, y: 0 };
   }
 
+  if (unit.type === 'hydra' && (unit.attackFlashMs ?? 0) > 0) {
+    return { x: 0, y: 0 };
+  }
+
   const desiredFacing = Math.atan2(dy, dx);
   unit.facing = turnTowards(
     unit.facing ?? desiredFacing,

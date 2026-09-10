@@ -14,7 +14,7 @@ import {
   drawRtsUnit,
 } from '/public/rts-render-v3.mjs';
 import { combatShakeOffset, minimapUnitRadius } from '/src/rts-feel.mjs';
-import { playCombatImpact, primeRtsAudio } from '/public/rts-audio.mjs';
+import { playCombatImpact, playUiCue, primeRtsAudio } from '/public/rts-audio.mjs';
 
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
 const map = buildClassicMap();
@@ -539,6 +539,7 @@ function selectUnits(start, end) {
       }
     }
   }
+  if (selectedIds.size > 0) playUiCue('select');
   renderSelectionInfo();
 }
 
@@ -703,6 +704,7 @@ battlefield.addEventListener('contextmenu', (event) => {
     y: target.y,
   })) {
     moveMarker = { x: target.x, y: target.y, startedAt: performance.now() };
+    playUiCue('move');
   }
 });
 
@@ -711,11 +713,11 @@ for (const button of document.querySelectorAll('button[data-upgrade]')) {
     if (!snapshot) return;
     const key = button.dataset.upgrade;
     const buildingType = key === 'attack' || key === 'defense' ? 'evolution' : 'hydra-den';
-    command({
+    if (command({
       type: 'upgrade',
       buildingId: `upgrade-${snapshot.self.slot}-${buildingType}`,
       upgradeKey: key,
-    });
+    })) playUiCue('upgrade');
   });
 }
 

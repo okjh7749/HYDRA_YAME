@@ -164,9 +164,9 @@ export function stepMovement(state, deltaMs) {
   }
 }
 
-function formationOffset(index, count, spacing = 24) {
+export function formationOffset(index, count, spacing = 22) {
   if (count <= 1) return { x: 0, y: 0 };
-  const width = Math.ceil(Math.sqrt(count));
+  const width = count >= 24 ? 7 : Math.ceil(Math.sqrt(count));
   const row = Math.floor(index / width);
   const column = index % width;
   const rows = Math.ceil(count / width);
@@ -176,12 +176,30 @@ function formationOffset(index, count, spacing = 24) {
   };
 }
 
+function rotateOffset(offset, angle) {
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+  return {
+    x: offset.x * cosine - offset.y * sine,
+    y: offset.x * sine + offset.y * cosine,
+  };
+}
+
 export function assignMoveOrders(map, state, unitIds, targetWorld) {
   const selected = state.units.filter((unit) => unitIds.has(unit.id));
   let ordered = 0;
 
+  const center = selected.reduce(
+    (sum, unit) => ({ x: sum.x + unit.x, y: sum.y + unit.y }),
+    { x: 0, y: 0 },
+  );
+  const centerX = selected.length ? center.x / selected.length : targetWorld.x;
+  const centerY = selected.length ? center.y / selected.length : targetWorld.y;
+  const heading = Math.atan2(targetWorld.y - centerY, targetWorld.x - centerX);
+
   selected.forEach((unit, index) => {
-    const offset = unit.type === 'hydra' ? formationOffset(index, selected.length) : { x: 0, y: 0 };
+    const baseOffset = unit.type === 'hydra' ? formationOffset(index, selected.length) : { x: 0, y: 0 };
+    const offset = rotateOffset(baseOffset, heading + Math.PI / 2);
     const desiredTarget = {
       x: targetWorld.x + offset.x,
       y: targetWorld.y + offset.y,
