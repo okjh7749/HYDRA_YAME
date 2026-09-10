@@ -20,7 +20,11 @@ test('multiplayer match uses a full-screen camera viewport with in-world HUD', a
   assert.match(html, /hud-top-right/);
   assert.match(css, /\.game-screen \{[\s\S]*position: fixed;[\s\S]*inset: 0;/);
   assert.match(css, /#battlefield \{[\s\S]*width: 100%;[\s\S]*height: 100%;/);
-  assert.match(client, /const CAMERA_ZOOM = 2\.2;/);
+  assert.match(client, /const CAMERA_ZOOM = RTS_CAMERA_ZOOM;/);
+  assert.match(client, /function interpolatedUnits\(/);
+  assert.match(client, /drawIndustrialTerrain/);
+  assert.match(client, /drawRtsUnit/);
+  assert.match(css, /RTS command console visual overhaul/);
   assert.match(client, /function updateCamera\(/);
   assert.match(client, /cameraWorldWidth\(\)/);
   assert.match(client, /minimap\.addEventListener\('pointerdown'/);
