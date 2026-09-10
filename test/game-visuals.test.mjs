@@ -11,9 +11,11 @@ import {
 
 test('RTS scale keeps combat units readable relative to 32px terrain tiles', () => {
   assert.ok(RTS_CAMERA_ZOOM >= 1.4 && RTS_CAMERA_ZOOM <= 1.8);
-  assert.ok(UNIT_VISUAL_SIZES.hydra.radiusX < 16);
+  assert.ok(UNIT_VISUAL_SIZES.hydra.radiusX <= 12);
+  assert.ok(UNIT_VISUAL_SIZES.hydra.spriteScale < UNIT_VISUAL_SIZES.overlord.spriteScale);
   assert.ok(UNIT_VISUAL_SIZES.overlord.radiusX > UNIT_VISUAL_SIZES.hydra.radiusX);
   assert.ok(UNIT_VISUAL_SIZES.sunken.radiusX > UNIT_VISUAL_SIZES.overlord.radiusX);
+  assert.ok(UNIT_VISUAL_SIZES.sunken.spriteScale > UNIT_VISUAL_SIZES.overlord.spriteScale);
   assert.ok(UNIT_VISUAL_SIZES.structure.radiusX >= UNIT_VISUAL_SIZES.overlord.radiusX);
 });
 
