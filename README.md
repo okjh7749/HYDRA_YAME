@@ -45,6 +45,20 @@ StarCraft custom-map-inspired Hydra territory game.
 
 ## Run locally
 
+### Windows: double-click launcher
+
+The easiest way on Windows is to double-click `실행.bat` in the project root. The launcher:
+
+- verifies that `node` is available
+- starts the game server in a separate terminal window from the correct project directory
+- waits briefly for startup and opens `http://127.0.0.1:8080` automatically
+- leaves the server terminal open so startup errors remain visible
+
+Keep the `Hydra Territory Server` terminal window open while playing. Closing that window stops the
+local game server.
+
+### Manual launch
+
 ```sh
 node src/dev-server.mjs
 ```
