@@ -13,6 +13,8 @@ import {
   drawRtsSunken,
   drawRtsUnit,
 } from '/public/rts-render-v3.mjs';
+import { combatShakeOffset, minimapUnitRadius } from '/src/rts-feel.mjs';
+import { playCombatImpact, primeRtsAudio } from '/public/rts-audio.mjs';
 
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
 const map = buildClassicMap();
@@ -446,6 +448,9 @@ function drawDrag() {
 
 function renderBattlefield() {
   frameEffects = visualEffects();
+  const shake = combatShakeOffset(frameEffects, visualFrameTime);
+  ctx.save();
+  ctx.translate(shake.x, shake.y);
   drawTerrain();
   drawZones();
   drawBeacons();
@@ -453,6 +458,7 @@ function renderBattlefield() {
   drawEffects();
   if (!drawMoveMarker(ctx, moveMarker, camera, CAMERA_ZOOM, visualFrameTime)) moveMarker = null;
   drawDrag();
+  ctx.restore();
 }
 
 function pruneSelection() {
@@ -559,6 +565,9 @@ function handleMessage(message) {
     previousSnapshot = snapshot;
     snapshot = message;
     snapshotReceivedAt = performance.now();
+    for (const effect of message.effects ?? []) {
+      if ((effect.elapsedMs ?? 0) <= 55) playCombatImpact(effect);
+    }
     renderSnapshot();
     return;
   }
@@ -654,6 +663,7 @@ leaveButton.addEventListener('click', () => {
 });
 
 battlefield.addEventListener('pointerdown', (event) => {
+  primeRtsAudio();
   if (event.button !== 0) return;
   const world = eventToWorld(event);
   drag = { start: world, current: world };
@@ -682,6 +692,7 @@ battlefield.addEventListener('pointercancel', () => {
 });
 
 battlefield.addEventListener('contextmenu', (event) => {
+  primeRtsAudio();
   event.preventDefault();
   if (!snapshot || selectedIds.size === 0 || snapshot.self.spectator) return;
   const target = eventToWorld(event);
@@ -744,14 +755,17 @@ function drawMinimap() {
   }
 
   for (const unit of snapshot?.units ?? []) {
+    const own = unit.ownerSlot === snapshot?.self.slot;
     miniCtx.fillStyle = unit.type === 'overlord'
       ? '#cf78bd'
       : (unit.type === 'zealot' ? '#fff1a5' : teamColors[unit.team]);
-    miniCtx.fillRect(unit.x * scaleX - 1, unit.y * scaleY - 1, 2.5, 2.5);
+    miniCtx.beginPath();
+    miniCtx.arc(unit.x * scaleX, unit.y * scaleY, minimapUnitRadius(unit.type, own), 0, Math.PI * 2);
+    miniCtx.fill();
   }
 
-  miniCtx.strokeStyle = '#ffffff';
-  miniCtx.lineWidth = 1;
+  miniCtx.strokeStyle = '#e7fbff';
+  miniCtx.lineWidth = 1.4;
   miniCtx.strokeRect(
     camera.x * scaleX,
     camera.y * scaleY,
