@@ -39,8 +39,8 @@ function resetSunken(zone) {
   zone.sunkenAttackCooldownMs = 0;
 }
 
-function createLocalOverlord(state, map) {
-  const player = playerForTeam(state, state.localTeam);
+function createOverlord(state, map, team) {
+  const player = playerForTeam(state, team);
   if (!player) return null;
   const point = nearestWalkablePoint(map, player.homeX + 54, player.homeY - 32, 8)
     ?? { x: player.homeX, y: player.homeY };
@@ -318,40 +318,44 @@ function hasStrictHydraLead(state, zone, team) {
   return counts.every((count, index) => index === team || own > count);
 }
 
-export function ensureLocalOverlord(state, map) {
+export function ensureLocalOverlord(state, map, team = state.localTeam) {
   initializeCombatState(state, map);
   if (state.match && state.match.phase !== 'running') return null;
-  const player = playerForTeam(state, state.localTeam);
+  const player = playerForTeam(state, team);
   if (!player || player.status === 'eliminated' || player.minerals < CAPTURE_COST) return null;
   const exists = state.units.some(
-    (unit) => unit.type === 'overlord' && unit.team === state.localTeam && unit.hp > 0,
+    (unit) => unit.type === 'overlord' && unit.team === team && unit.hp > 0,
   );
-  return exists ? null : createLocalOverlord(state, map);
+  if (exists) return null;
+  const hasHydra = state.units.some(
+    (unit) => unit.type === 'hydra' && unit.team === team && unit.hp > 0,
+  );
+  return hasHydra ? createOverlord(state, map, team) : null;
 }
 
-export function stepCapture(state, map) {
+export function stepCapture(state, map, team = state.localTeam) {
   initializeCombatState(state, map);
   const captures = [];
   if (state.match && state.match.phase !== 'running') return captures;
-  const player = playerForTeam(state, state.localTeam);
+  const player = playerForTeam(state, team);
   if (!player || player.status === 'eliminated' || player.minerals < CAPTURE_COST) return captures;
 
   const overlords = state.units.filter(
-    (unit) => unit.type === 'overlord' && unit.team === state.localTeam && unit.hp > 0,
+    (unit) => unit.type === 'overlord' && unit.team === team && unit.hp > 0,
   );
   for (const zone of map.zones) {
     if (zone.ownerTeam !== null || zone.sunkenHp > 0) continue;
     const overlord = overlords.find(
       (unit) => distanceSquared(unit, zone) <= CAPTURE_RADIUS * CAPTURE_RADIUS,
     );
-    if (!overlord || !hasStrictHydraLead(state, zone, state.localTeam)) continue;
+    if (!overlord || !hasStrictHydraLead(state, zone, team)) continue;
 
     player.minerals -= CAPTURE_COST;
     player.captures += 1;
     overlord.hp = 0;
-    zone.ownerTeam = state.localTeam;
+    zone.ownerTeam = team;
     resetSunken(zone);
-    captures.push({ zoneId: zone.id, team: state.localTeam });
+    captures.push({ zoneId: zone.id, team });
     pushEffect(state, {
       type: 'capture',
       x1: zone.x,
@@ -364,6 +368,6 @@ export function stepCapture(state, map) {
   }
 
   cleanupDeadUnits(state);
-  ensureLocalOverlord(state, map);
+  ensureLocalOverlord(state, map, team);
   return captures;
 }

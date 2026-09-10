@@ -7,7 +7,18 @@ Direct main pushes are prohibited after the authorized initial bootstrap.
 This repository now contains a playable browser milestone for a
 StarCraft custom-map-inspired Hydra territory game.
 
-## Current milestone
+## Multiplayer milestone
+
+- 2–8 player room creation/join flow with short room codes and ready/start states
+- StarCraft-style four-force seat mapping: P1/P2, P3/P4, P5/P6 and P7/P8
+- authoritative room simulation at 20 Hz; clients send commands, never trusted positions
+- per-client snapshots at 10 Hz with live-vision filtering for enemy units and zones
+- server-side ownership validation for movement and upgrade commands
+- client-specific victory/defeat results and full-vision spectator snapshots after elimination
+- teammate-aware disconnect handling; a force is forfeited only after its last client leaves
+- dependency-free RFC 6455 WebSocket handshake/frame handling using Node.js standard libraries
+
+## Classic local simulation
 
 - 64 x 64 navigation grid (2048 x 2048 world pixels)
 - 21 strategic capture zones with four team starting zones
@@ -30,7 +41,7 @@ StarCraft custom-map-inspired Hydra territory game.
 - clickable strategic minimap with a live camera rectangle and unit dots
 - controllable Overlord and Hydras with right-click pathfinding
 - invalid movement targets snap to the nearest valid tile
-- local static server implemented with Node.js standard library only
+- local HTTP/WebSocket server implemented with Node.js standard libraries only
 
 ## Run locally
 
@@ -38,9 +49,21 @@ StarCraft custom-map-inspired Hydra territory game.
 node src/dev-server.mjs
 ```
 
-Then open `http://127.0.0.1:8080`.
+Then open:
 
-## Controls
+- `http://127.0.0.1:8080` for the multiplayer lobby
+- `http://127.0.0.1:8080/classic` for the existing local Classic simulation
+
+For a quick multiplayer smoke test, open the root URL in two browser tabs. Create a room in
+the first tab, join its room code in the second, mark both players ready, and start from the host tab.
+
+## Multiplayer controls
+
+- left click or drag: select friendly units from the latest server snapshot
+- right click: send a movement command for the selected units
+- upgrade buttons: send validated attack/defense/range/speed purchase commands
+
+## Classic local controls
 
 - `WASD` / arrow keys: move camera
 - move the pointer to the viewport edge: edge scroll
