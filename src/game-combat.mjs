@@ -9,6 +9,11 @@ import {
   unitOwnerSlot,
   zoneOwnerSlot,
 } from './game-ownership.mjs';
+import {
+  ATTACK_VISUAL_WINDOW_MS,
+  DEATH_VISUAL_WINDOW_MS,
+  PROJECTILE_VISUAL_DURATION_MS,
+} from './rts-animation.mjs';
 
 export const HYDRA_BASE_DAMAGE = 5;
 export const HYDRA_ATTACK_RANGE = 96;
@@ -187,7 +192,7 @@ function pushUnitDeathEffect(state, unit, cause = 'combat') {
     y1: unit.y,
     x2: unit.x,
     y2: unit.y,
-    ttlMs: 560,
+    ttlMs: DEATH_VISUAL_WINDOW_MS,
   });
 }
 
@@ -202,6 +207,7 @@ function damageUnit(state, target, amount, attackerOwnerSlot, source) {
     y2: target.y,
     damage: amount,
     targetId: target.id,
+    ttlMs: PROJECTILE_VISUAL_DURATION_MS,
   });
   if (target.hp > 0) return false;
 
@@ -271,7 +277,7 @@ function destroySunken(state, zone, attackerOwnerSlot) {
     x2: zone.x,
     y2: zone.y,
     damage: SUNKEN_KILL_REWARD,
-    ttlMs: 520,
+    ttlMs: DEATH_VISUAL_WINDOW_MS,
   });
   return true;
 }
@@ -312,7 +318,7 @@ export function stepCombat(state, map, deltaMs) {
       unit.currentTarget = { kind: 'unit', id: enemyUnit.id };
       damageUnit(state, enemyUnit, amount, attackerOwnerSlot, unit);
       unit.attackCooldownMs = HYDRA_ATTACK_COOLDOWN_MS;
-      unit.attackFlashMs = 140;
+      unit.attackFlashMs = ATTACK_VISUAL_WINDOW_MS;
       continue;
     }
 
@@ -333,9 +339,10 @@ export function stepCombat(state, map, deltaMs) {
       y2: enemySunken.y,
       targetZoneId: enemySunken.id,
       damage: amount,
+      ttlMs: PROJECTILE_VISUAL_DURATION_MS,
     });
     unit.attackCooldownMs = HYDRA_ATTACK_COOLDOWN_MS;
-    unit.attackFlashMs = 140;
+    unit.attackFlashMs = ATTACK_VISUAL_WINDOW_MS;
     if (enemySunken.sunkenHp <= 0) destroySunken(state, enemySunken, attackerOwnerSlot);
   }
 
@@ -353,7 +360,7 @@ export function stepCombat(state, map, deltaMs) {
     const amount = Math.max(1, SUNKEN_DAMAGE - armor);
     damageUnit(state, target, amount, ownerSlot, { x: zone.x, y: zone.y, kind: 'sunken' });
     zone.sunkenAttackCooldownMs = SUNKEN_ATTACK_COOLDOWN_MS;
-    zone.sunkenAttackFlashMs = 140;
+    zone.sunkenAttackFlashMs = ATTACK_VISUAL_WINDOW_MS;
   }
 
   cleanupDeadUnits(state);

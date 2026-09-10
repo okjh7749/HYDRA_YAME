@@ -1,15 +1,18 @@
 export const UNIT_ANIMATION_STATES = Object.freeze(['idle', 'move', 'attack', 'hit', 'death']);
 
 export const UNIT_ANIMATION_LAYOUT = Object.freeze({
-  idle: Object.freeze({ frames: 2, frameMs: 340 }),
-  move: Object.freeze({ frames: 4, frameMs: 92 }),
-  attack: Object.freeze({ frames: 4, frameMs: 35 }),
-  hit: Object.freeze({ frames: 2, frameMs: 68 }),
-  death: Object.freeze({ frames: 6, frameMs: 84 }),
+  idle: Object.freeze({ frames: 2, frameMs: 380 }),
+  move: Object.freeze({ frames: 4, frameMs: 105 }),
+  attack: Object.freeze({ frames: 4, frameMs: 45 }),
+  hit: Object.freeze({ frames: 2, frameMs: 60 }),
+  death: Object.freeze({ frames: 6, frameMs: 105 }),
 });
 
-export const ATTACK_VISUAL_WINDOW_MS = 140;
-export const HIT_VISUAL_WINDOW_MS = 150;
+export const ATTACK_VISUAL_WINDOW_MS = 180;
+export const HIT_VISUAL_WINDOW_MS = 120;
+export const DEATH_VISUAL_WINDOW_MS = 650;
+export const PROJECTILE_VISUAL_DURATION_MS = 210;
+export const PROJECTILE_LAUNCH_DELAY_MS = 45;
 
 export const SPRITE_STATE_OFFSETS = Object.freeze({
   idle: 0,
@@ -100,8 +103,10 @@ export function spriteColumn(state, frame) {
 }
 
 export function projectileProgress(effect) {
-  const durationMs = Math.max(1, effect?.durationMs ?? 240);
-  return clamp((effect?.elapsedMs ?? 0) / durationMs, 0, 1);
+  const durationMs = Math.max(PROJECTILE_LAUNCH_DELAY_MS + 1, effect?.durationMs ?? PROJECTILE_VISUAL_DURATION_MS);
+  const travelMs = durationMs - PROJECTILE_LAUNCH_DELAY_MS;
+  const elapsedMs = Math.max(0, (effect?.elapsedMs ?? 0) - PROJECTILE_LAUNCH_DELAY_MS);
+  return clamp(elapsedMs / travelMs, 0, 1);
 }
 
 export function deathAnimationFrame(effect) {

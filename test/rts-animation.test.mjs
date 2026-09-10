@@ -53,15 +53,16 @@ test('sunken animation exposes attack and impact states from authoritative effec
 
 test('attack, death and projectile frames advance without wrapping terminal states', () => {
   assert.equal(animationFrame('attack', 0, 1, 0), 0);
-  assert.equal(animationFrame('attack', 0, 1, 140), 3);
+  assert.equal(animationFrame('attack', 0, 1, 180), 3);
   assert.equal(animationFrame('death', 0, 1, 9999), 5);
 
-  assert.equal(projectileProgress({ elapsedMs: 0, durationMs: 240 }), 0);
-  assert.equal(projectileProgress({ elapsedMs: 120, durationMs: 240 }), 0.5);
-  assert.equal(projectileProgress({ elapsedMs: 999, durationMs: 240 }), 1);
+  assert.equal(projectileProgress({ elapsedMs: 0, durationMs: 210 }), 0);
+  assert.equal(projectileProgress({ elapsedMs: 45, durationMs: 210 }), 0);
+  assert.equal(projectileProgress({ elapsedMs: 127.5, durationMs: 210 }), 0.5);
+  assert.equal(projectileProgress({ elapsedMs: 999, durationMs: 210 }), 1);
 
-  assert.equal(deathAnimationFrame({ elapsedMs: 0, durationMs: 560 }), 0);
-  assert.equal(deathAnimationFrame({ elapsedMs: 559, durationMs: 560 }), 5);
+  assert.equal(deathAnimationFrame({ elapsedMs: 0, durationMs: 650 }), 0);
+  assert.equal(deathAnimationFrame({ elapsedMs: 649, durationMs: 650 }), 5);
 });
 
 test('stale hit effects no longer override movement animation', () => {

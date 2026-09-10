@@ -36,11 +36,11 @@ function ellipse(ctx, x, y, rx, ry, fill, stroke = null, lineWidth = 1) {
 function motionPose(state, frame) {
   if (state === 'move') return gaitPose(frame);
   if (state === 'attack') {
-    const attack = [0, 2.5, 5, 1][frame] ?? 0;
+    const attack = [0, 1.5, 4, 1.5][frame] ?? 0;
     return { stride: attack * 0.3, lift: -attack * 0.18, tail: attack * 0.25, lunge: attack };
   }
   if (state === 'hit') {
-    const recoil = frame === 0 ? -3 : -1;
+    const recoil = frame === 0 ? -2 : -0.5;
     return { stride: 0, lift: 0, tail: recoil * 0.3, lunge: recoil };
   }
   return { stride: 0, lift: 0, tail: 0, lunge: 0 };
@@ -182,9 +182,18 @@ function drawFrame(ctx, type, state, frame, direction, teamColor) {
     ? frame / Math.max(1, UNIT_ANIMATION_LAYOUT.death.frames - 1)
     : 0;
   if (state === 'death') {
-    ctx.globalAlpha = 1 - deathProgress * 0.82;
-    ctx.rotate(deathProgress * 0.8);
-    ctx.scale(1 + deathProgress * 0.08, 1 - deathProgress * 0.62);
+    ctx.globalAlpha = 1 - deathProgress * 0.9;
+    if (type === 'overlord') {
+      ctx.translate(0, deathProgress * 7);
+      ctx.scale(1 + deathProgress * 0.03, 1 - deathProgress * 0.18);
+    } else if (type === 'sunken') {
+      ctx.rotate(deathProgress * 0.08);
+      ctx.scale(1 - deathProgress * 0.18, 1 - deathProgress * 0.28);
+    } else {
+      ctx.translate(0, deathProgress * 3);
+      ctx.rotate(deathProgress * 0.34);
+      ctx.scale(1 + deathProgress * 0.03, 1 - deathProgress * 0.44);
+    }
   }
   if (type !== 'overlord' && type !== 'sunken') ctx.rotate(direction * (Math.PI / 4));
   const pose = motionPose(state, frame);
@@ -195,8 +204,8 @@ function drawFrame(ctx, type, state, frame, direction, teamColor) {
 
   if (state === 'hit') {
     ctx.globalCompositeOperation = 'source-atop';
-    ctx.globalAlpha = frame === 0 ? 0.62 : 0.3;
-    ctx.fillStyle = '#ffd1c5';
+    ctx.globalAlpha = frame === 0 ? 0.38 : 0.16;
+    ctx.fillStyle = '#ffe1d8';
     ctx.fillRect(-32, -32, 64, 64);
   }
   ctx.restore();

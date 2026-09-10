@@ -68,12 +68,13 @@ export function drawRtsUnit(ctx, unit, options = {}) {
   const descriptor = resolveUnitAnimation(unit, options.effects, moving);
   const frame = animationFrame(descriptor.state, timeMs, unit.id, descriptor.ageMs);
   const direction = facingDirection8(unit.facing ?? 0);
-  const bob = unit.type === 'overlord' ? Math.sin(timeMs / 260 + unit.id) * 1.4 * scale : 0;
+  const bob = unit.type === 'overlord' ? Math.sin(timeMs / 310 + unit.id) * 0.9 * scale : 0;
+  const spriteScale = scale * (size.spriteScale ?? 1);
 
   shadow(ctx, size, x, y, scale, unit.type === 'overlord');
   if (options.selected) selectionRing(ctx, size, x, y, scale);
   const atlas = getSpriteAtlas(unit.type, teamColor);
-  drawAtlasSprite(ctx, atlas, descriptor.state, frame, direction, x, y + bob, scale);
+  drawAtlasSprite(ctx, atlas, descriptor.state, frame, direction, x, y + bob, spriteScale);
 
   const ratio = unit.maxHp ? unit.hp / unit.maxHp : 1;
   if (options.selected || ratio < 0.999) {
@@ -101,7 +102,8 @@ export function drawRtsSunken(ctx, zone, options = {}) {
 
   shadow(ctx, size, x, y, scale, false);
   if (options.selected) selectionRing(ctx, size, x, y, scale);
-  drawAtlasSprite(ctx, getSpriteAtlas('sunken', teamColor), descriptor.state, frame, 0, x, y, scale);
+  const spriteScale = scale * (size.spriteScale ?? 1);
+  drawAtlasSprite(ctx, getSpriteAtlas('sunken', teamColor), descriptor.state, frame, 0, x, y, spriteScale);
 
   const ratio = zone.sunkenMaxHp ? zone.sunkenHp / zone.sunkenMaxHp : 1;
   if (options.selected || ratio < 0.999) {
@@ -120,28 +122,28 @@ function drawHydraProjectile(ctx, effect, camera, zoom) {
   ctx.translate(x, y);
   ctx.rotate(angle);
   ctx.shadowColor = '#b7ef70';
-  ctx.shadowBlur = 5 * zoom;
-  ctx.strokeStyle = '#d9ff9e';
-  ctx.lineWidth = Math.max(1, 1.3 * zoom);
+  ctx.shadowBlur = 3.5 * zoom;
+  ctx.strokeStyle = '#cceb8f';
+  ctx.lineWidth = Math.max(1, 0.85 * zoom);
   ctx.beginPath();
-  ctx.moveTo(-7 * zoom, 0);
-  ctx.lineTo(5 * zoom, 0);
+  ctx.moveTo(-4.5 * zoom, 0);
+  ctx.lineTo(3 * zoom, 0);
   ctx.stroke();
   ctx.fillStyle = '#efffc0';
   ctx.beginPath();
-  ctx.moveTo(6 * zoom, 0);
-  ctx.lineTo(1 * zoom, -2.5 * zoom);
-  ctx.lineTo(1 * zoom, 2.5 * zoom);
+  ctx.moveTo(4.5 * zoom, 0);
+  ctx.lineTo(1 * zoom, -1.7 * zoom);
+  ctx.lineTo(1 * zoom, 1.7 * zoom);
   ctx.closePath();
   ctx.fill();
   ctx.restore();
 
-  if (progress > 0.72) {
+  if (progress > 0.78) {
     ctx.save();
-    ctx.globalAlpha = (progress - 0.72) / 0.28;
+    ctx.globalAlpha = (progress - 0.78) / 0.22;
     ctx.strokeStyle = '#e7ffad';
     ctx.beginPath();
-    ctx.arc(end.x, end.y, 3.5 * zoom, 0, Math.PI * 2);
+    ctx.arc(end.x, end.y, 2.5 * zoom, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
@@ -152,15 +154,16 @@ function drawSunkenStrike(ctx, effect, camera, zoom) {
   const end = point(camera, zoom, effect.x2, effect.y2);
   const progress = projectileProgress(effect);
   ctx.save();
-  ctx.strokeStyle = '#ff9b65';
-  ctx.shadowColor = '#ff5d35';
-  ctx.shadowBlur = 7 * zoom;
-  ctx.lineWidth = Math.max(2, 2.5 * zoom);
+  ctx.globalAlpha = 0.82;
+  ctx.strokeStyle = '#d77b52';
+  ctx.shadowColor = '#a84028';
+  ctx.shadowBlur = 3 * zoom;
+  ctx.lineWidth = Math.max(1.5, 1.8 * zoom);
   ctx.beginPath();
-  const segments = 5;
+  const segments = 6;
   for (let index = 0; index <= segments; index += 1) {
     const t = index / segments;
-    const jitter = Math.sin((index + progress * 5) * Math.PI) * 3 * zoom;
+    const jitter = Math.sin((index + progress * 4) * Math.PI) * 1.8 * zoom;
     const x = start.x + (end.x - start.x) * t;
     const y = start.y + (end.y - start.y) * t + jitter;
     if (index === 0) ctx.moveTo(x, y);

@@ -2,11 +2,11 @@ export const RTS_CAMERA_ZOOM = 1.55;
 export const SNAPSHOT_INTERPOLATION_MS = 110;
 
 export const UNIT_VISUAL_SIZES = Object.freeze({
-  hydra: Object.freeze({ radiusX: 13, radiusY: 9, healthWidth: 27 }),
-  zealot: Object.freeze({ radiusX: 14, radiusY: 10, healthWidth: 29 }),
-  overlord: Object.freeze({ radiusX: 22, radiusY: 16, healthWidth: 39 }),
-  sunken: Object.freeze({ radiusX: 27, radiusY: 21, healthWidth: 48 }),
-  structure: Object.freeze({ radiusX: 26, radiusY: 22, healthWidth: 48 }),
+  hydra: Object.freeze({ radiusX: 12, radiusY: 8, healthWidth: 25, spriteScale: 0.67 }),
+  zealot: Object.freeze({ radiusX: 13, radiusY: 9, healthWidth: 27, spriteScale: 0.70 }),
+  overlord: Object.freeze({ radiusX: 21, radiusY: 15, healthWidth: 38, spriteScale: 0.84 }),
+  sunken: Object.freeze({ radiusX: 28, radiusY: 22, healthWidth: 52, spriteScale: 0.94 }),
+  structure: Object.freeze({ radiusX: 26, radiusY: 22, healthWidth: 48, spriteScale: 1 }),
 });
 
 export function clamp01(value) {
