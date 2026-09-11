@@ -3,6 +3,7 @@ import {
   projectLockstepSnapshot,
   restoreLockstepRoom,
 } from '/src/lockstep-sync.mjs';
+import { packRenderUnitFrame } from '/src/render-unit-frame.mjs';
 
 let room = null;
 let clientId = null;
@@ -13,13 +14,16 @@ function postSnapshot(serial = 0) {
   if (!room || !clientId) return;
   const snapshot = projectLockstepSnapshot(room, clientId, localSnapshotSequence++);
   if (!snapshot) return;
+  const unitFrame = packRenderUnitFrame(snapshot.units ?? []);
+  snapshot.units = null;
   self.postMessage({
     type: 'snapshot',
     snapshot,
+    unitFrame,
     serial,
     localTick: room.tick,
     checksumChecks,
-  });
+  }, [unitFrame.buffer]);
 }
 
 function reset() {
@@ -86,13 +90,16 @@ self.addEventListener('message', (event) => {
       return;
     }
     if (result.checksumCompared) checksumChecks += 1;
-    self.postMessage({
-      type: 'frame-ack',
-      serial: message.serial ?? 0,
-      localTick: room.tick,
-      checksumChecks,
-      duplicate: Boolean(result.duplicate),
-    });
-    if (!result.duplicate) postSnapshot(message.serial ?? 0);
+    if (result.duplicate) {
+      self.postMessage({
+        type: 'frame-ack',
+        serial: message.serial ?? 0,
+        localTick: room.tick,
+        checksumChecks,
+        duplicate: true,
+      });
+      return;
+    }
+    postSnapshot(message.serial ?? 0);
   }
 });
