@@ -8,11 +8,14 @@ import { initializeUpgradeBuildings } from '../src/game-upgrades.mjs';
 import { buildClassicMap, isWalkableWorld } from '../src/game-core.mjs';
 import {
   HYDRA_SPAWN_INTERVAL_MS,
+  LARGE_ORDER_UNIT_THRESHOLD,
   MAX_LOCAL_HYDRAS_PER_ZONE,
   assignMoveOrders,
   countHydrasNearZone,
   createSimulation,
+  getVisionSources,
   isPointVisible,
+  isPointVisibleFromSources,
   selectUnitsInRect,
   stepMovement,
   stepProduction,
@@ -163,4 +166,35 @@ test('moving the local overlord reveals remote territory in real time', () => {
   overlord.y = remote.y;
 
   assert.equal(isPointVisible(state, map, 0, remote.x, remote.y), true);
+});
+
+test('dense armies collapse into a small conservative set of vision sources', () => {
+  const map = buildClassicMap();
+  const state = createSimulation(map, { localTeam: 0 });
+  stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS * 20);
+
+  const friendly = state.units.filter((unit) => unit.team === 0);
+  const sources = getVisionSources(state, map, 0);
+
+  assert.ok(friendly.length > 20);
+  assert.ok(sources.length < friendly.length);
+  for (const unit of friendly) {
+    assert.equal(isPointVisibleFromSources(sources, unit.x, unit.y), true);
+  }
+});
+
+test('large move orders share grouped paths instead of pathfinding once per unit', () => {
+  const map = buildClassicMap();
+  const state = createSimulation(map, { localTeam: 0 });
+  stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS * LARGE_ORDER_UNIT_THRESHOLD);
+  const hydras = state.units
+    .filter((unit) => unit.type === 'hydra' && unit.ownerSlot === 0)
+    .slice(0, LARGE_ORDER_UNIT_THRESHOLD);
+  const target = map.zones[12];
+  const ids = new Set(hydras.map((unit) => unit.id));
+
+  assert.equal(hydras.length, LARGE_ORDER_UNIT_THRESHOLD);
+  assert.equal(assignMoveOrders(map, state, ids, target), hydras.length);
+  const distinctPaths = new Set(hydras.map((unit) => unit.path));
+  assert.ok(distinctPaths.size < hydras.length);
 });

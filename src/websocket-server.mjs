@@ -7,6 +7,8 @@ import {
   websocketAcceptValue,
 } from './websocket-protocol.mjs';
 
+export const REALTIME_BACKPRESSURE_BYTES = 128 * 1024;
+
 function connectionHeaderIncludesUpgrade(value) {
   return String(value ?? '')
     .split(',')
@@ -31,10 +33,16 @@ export class WebSocketPeer extends EventEmitter {
     });
   }
 
-  sendJson(value) {
+  canSendRealtime(maxBufferedBytes = REALTIME_BACKPRESSURE_BYTES) {
+    return !this.closed
+      && !this.socket.destroyed
+      && (this.socket.writableLength ?? 0) <= maxBufferedBytes;
+  }
+
+  sendJson(value, { realtime = false } = {}) {
     if (this.closed || this.socket.destroyed) return false;
-    this.socket.write(encodeJsonMessage(value));
-    return true;
+    if (realtime && !this.canSendRealtime()) return false;
+    return this.socket.write(encodeJsonMessage(value));
   }
 
   close(code = 1000, reason = '') {

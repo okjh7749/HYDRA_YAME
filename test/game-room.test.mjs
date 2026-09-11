@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  BUSY_SNAPSHOT_INTERVAL_MS,
+  HEAVY_SNAPSHOT_INTERVAL_MS,
   MAX_ROOM_PLAYERS,
   SLOT_JOIN_ORDER,
   createRoom,
@@ -9,6 +11,7 @@ import {
   joinRoom,
   leaveRoom,
   roomNeedsSnapshot,
+  snapshotIntervalForRoom,
   setRoomReady,
   snapshotForClient,
   startRoom,
@@ -84,6 +87,20 @@ test('authoritative room advances at 50ms ticks and emits snapshots every 100ms'
   );
   assert.equal(hydraTeams.has(0), true);
   assert.equal(hydraTeams.has(1), true);
+});
+
+test('snapshot cadence relaxes automatically for large armies', () => {
+  const room = createRoom({ id: 'load', hostId: 'host', hostName: 'Host' });
+
+  room.state.units = Array.from({ length: 120 }, () => ({}));
+  assert.equal(snapshotIntervalForRoom(room), BUSY_SNAPSHOT_INTERVAL_MS);
+  room.snapshotAccumulatorMs = BUSY_SNAPSHOT_INTERVAL_MS - 1;
+  assert.equal(roomNeedsSnapshot(room), false);
+  room.snapshotAccumulatorMs += 1;
+  assert.equal(roomNeedsSnapshot(room), true);
+
+  room.state.units = Array.from({ length: 240 }, () => ({}));
+  assert.equal(snapshotIntervalForRoom(room), HEAVY_SNAPSHOT_INTERVAL_MS);
 });
 
 test('server move command ignores enemy ids and moves only the callers team', () => {
