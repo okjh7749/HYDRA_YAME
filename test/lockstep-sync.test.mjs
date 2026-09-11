@@ -12,6 +12,7 @@ import {
 } from '../src/game-room.mjs';
 import {
   applyLockstepFrame,
+  projectLockstepSnapshot,
   restoreLockstepRoom,
   serializeLockstepBootstrap,
 } from '../src/lockstep-sync.mjs';
@@ -124,4 +125,24 @@ test('shadow detects a missing lockstep frame before advancing', () => {
   assert.equal(result.ok, false);
   assert.equal(result.reason, 'frame-gap');
   assert.equal(shadow.tick, server.tick);
+});
+
+test('local lockstep projection preserves the authoritative client visibility filter', () => {
+  const server = createStartedRoom();
+  const shadow = restoreLockstepRoom(serializeLockstepBootstrap(server));
+  const projected = projectLockstepSnapshot(shadow, 'host', 7);
+  const hiddenEnemy = server.state.units.find(
+    (unit) => unit.type === 'zealot' && unit.team === 1,
+  );
+
+  assert.ok(projected);
+  assert.ok(hiddenEnemy);
+  assert.equal(projected.sequence, 7);
+  assert.equal(projected.source, 'lockstep-local');
+  assert.equal(projected.serverTick, shadow.tick);
+  assert.equal(projected.snapshotIntervalMs, 50);
+  assert.equal(projected.units.some((unit) => unit.id === hiddenEnemy.id), false);
+  assert.equal(projected.beacons.every((pad) => pad.ownerSlot === projected.self.slot), true);
+  assert.equal(projected.buildings.every((building) => building.ownerSlot === projected.self.slot), true);
+  assert.equal(projected.teams.find((team) => team.team === 1).minerals, '?');
 });

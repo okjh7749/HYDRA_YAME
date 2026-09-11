@@ -2,7 +2,13 @@ import { EventEmitter } from 'node:events';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createMultiplayerHub } from '../src/multiplayer-hub.mjs';
+import {
+  BUSY_RECOVERY_SNAPSHOT_INTERVAL_MS,
+  HEAVY_RECOVERY_SNAPSHOT_INTERVAL_MS,
+  RECOVERY_SNAPSHOT_INTERVAL_MS,
+  createMultiplayerHub,
+  recoverySnapshotIntervalForRoom,
+} from '../src/multiplayer-hub.mjs';
 
 class FakePeer extends EventEmitter {
   constructor() {
@@ -128,6 +134,42 @@ test('hub sends reliable lockstep frames and supports bootstrap resync', () => {
   assert.ok(resync);
   assert.equal(resync.bootstrap.tick, room.tick);
   assert.equal(resync.bootstrap.checksumTick, room.tick);
+
+  hub.stop();
+});
+
+test('full recovery snapshots are throttled while 20Hz lockstep frames continue', () => {
+  const hub = createMultiplayerHub({ tickMs: 50 });
+  const host = new FakePeer();
+  const guest = new FakePeer();
+  hub.connect(host);
+  hub.connect(guest);
+
+  host.emit('message', { type: 'create-room', name: 'Host' });
+  const roomId = host.sent.find((message) => message.type === 'lobby').roomId;
+  guest.emit('message', { type: 'join-room', roomId, name: 'Guest' });
+  host.emit('message', { type: 'ready', ready: true });
+  guest.emit('message', { type: 'ready', ready: true });
+  host.emit('message', { type: 'start-room' });
+
+  host.sent = [];
+  for (let tick = 0; tick < 19; tick += 1) hub.tick();
+  assert.equal(host.sent.filter((message) => message.type === 'lockstep-frame').length, 19);
+  assert.equal(host.sent.filter((message) => message.type === 'snapshot').length, 0);
+
+  hub.tick();
+  assert.equal(host.sent.filter((message) => message.type === 'lockstep-frame').length, 20);
+  assert.equal(host.sent.filter((message) => message.type === 'snapshot').length, 1);
+
+  const room = hub.rooms.get(roomId);
+  assert.equal(recoverySnapshotIntervalForRoom(room), RECOVERY_SNAPSHOT_INTERVAL_MS);
+  room.state.units = Array.from({ length: 120 }, () => ({}));
+  assert.equal(recoverySnapshotIntervalForRoom(room), BUSY_RECOVERY_SNAPSHOT_INTERVAL_MS);
+  room.state.units = Array.from({ length: 240 }, () => ({}));
+  assert.equal(recoverySnapshotIntervalForRoom(room), HEAVY_RECOVERY_SNAPSHOT_INTERVAL_MS);
+  assert.equal(RECOVERY_SNAPSHOT_INTERVAL_MS, 1000);
+  assert.equal(BUSY_RECOVERY_SNAPSHOT_INTERVAL_MS, 1500);
+  assert.equal(HEAVY_RECOVERY_SNAPSHOT_INTERVAL_MS, 2000);
 
   hub.stop();
 });

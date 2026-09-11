@@ -7,7 +7,6 @@ import {
   joinRoom,
   leaveRoom,
   lobbyView,
-  roomNeedsSnapshot,
   setRoomReady,
   snapshotForClient,
   startRoom,
@@ -15,6 +14,26 @@ import {
 } from './game-room.mjs';
 
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+export const RECOVERY_SNAPSHOT_INTERVAL_MS = 1000;
+export const BUSY_RECOVERY_SNAPSHOT_INTERVAL_MS = 1500;
+export const HEAVY_RECOVERY_SNAPSHOT_INTERVAL_MS = 2000;
+
+export function recoverySnapshotIntervalForRoom(room) {
+  const unitCount = room.state.units.length;
+  if (unitCount >= 240) return HEAVY_RECOVERY_SNAPSHOT_INTERVAL_MS;
+  if (unitCount >= 120) return BUSY_RECOVERY_SNAPSHOT_INTERVAL_MS;
+  return RECOVERY_SNAPSHOT_INTERVAL_MS;
+}
+
+function roomNeedsRecoverySnapshot(room, deltaMs) {
+  const intervalMs = recoverySnapshotIntervalForRoom(room);
+  room.recoverySnapshotAccumulatorMs = (room.recoverySnapshotAccumulatorMs ?? 0) + deltaMs;
+  if (room.recoverySnapshotAccumulatorMs < intervalMs) return false;
+  room.recoverySnapshotAccumulatorMs %= intervalMs;
+  room.snapshotSequence += 1;
+  return true;
+}
 
 function normalizeRoomId(value) {
   return String(value ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
@@ -254,7 +273,7 @@ export function createMultiplayerHub({ tickMs = SERVER_TICK_MS } = {}) {
       const previousStatus = room.status;
       tickRoom(room, tickMs);
       sendLockstepFrame(room);
-      const shouldSnapshot = roomNeedsSnapshot(room);
+      const shouldSnapshot = roomNeedsRecoverySnapshot(room, tickMs);
       if (shouldSnapshot || room.status !== previousStatus) sendSnapshots(room);
       if (room.status !== previousStatus) sendLobby(room);
     }
