@@ -1,4 +1,5 @@
 import { buildClassicMap, clampCamera, isWalkableTile } from '/src/game-core.mjs';
+import { applyLockstepFrame, restoreLockstepRoom } from '/src/lockstep-sync.mjs';
 import {
   RTS_CAMERA_ZOOM,
   SNAPSHOT_INTERPOLATION_MS,
@@ -61,6 +62,11 @@ let lobby = null;
 let snapshot = null;
 let previousSnapshot = null;
 let previousUnitsById = new Map();
+let shadowRoom = null;
+let lockstepHealth = 'WAITING';
+let lockstepResyncPending = false;
+let lockstepChecksumChecks = 0;
+let lockstepResyncs = 0;
 let snapshotReceivedAt = performance.now();
 let moveMarker = null;
 let visualFrameTime = performance.now();
@@ -106,6 +112,63 @@ function command(commandPayload) {
     requestId: requestSequence++,
     command: commandPayload,
   });
+}
+
+function requestLockstepResync(reason) {
+  if (lockstepResyncPending || lockstepResyncs >= 3) {
+    if (lockstepResyncs >= 3) lockstepHealth = 'SNAPSHOT FALLBACK';
+    return false;
+  }
+  lockstepResyncPending = true;
+  lockstepResyncs += 1;
+  lockstepHealth = `RESYNC ${reason}`;
+  return send({
+    type: 'lockstep-resync',
+    requestId: requestSequence++,
+    reason,
+  });
+}
+
+function installLockstepBootstrap(bootstrap) {
+  try {
+    shadowRoom = restoreLockstepRoom(bootstrap);
+    lockstepResyncPending = false;
+    if (!shadowRoom.bootstrapChecksumMatches) {
+      lockstepHealth = 'BOOTSTRAP MISMATCH';
+      requestLockstepResync('bootstrap-checksum');
+      return;
+    }
+    lockstepHealth = 'SYNCED';
+  } catch {
+    shadowRoom = null;
+    lockstepHealth = 'BOOTSTRAP ERROR';
+    requestLockstepResync('bootstrap-error');
+  }
+}
+
+function runLockstepFrame(frame) {
+  const result = applyLockstepFrame(shadowRoom, frame);
+  if (!result.ok) {
+    lockstepHealth = result.reason?.toUpperCase() ?? 'DESYNC';
+    requestLockstepResync(result.reason ?? 'frame-error');
+    return result;
+  }
+  if (result.duplicate) return result;
+  if (result.checksumCompared) {
+    lockstepChecksumChecks += 1;
+    lockstepHealth = `SYNC OK #${lockstepChecksumChecks}`;
+  } else {
+    lockstepHealth = 'RUNNING';
+  }
+  return result;
+}
+
+function resetLockstepShadow() {
+  shadowRoom = null;
+  lockstepHealth = 'WAITING';
+  lockstepResyncPending = false;
+  lockstepChecksumChecks = 0;
+  lockstepResyncs = 0;
 }
 
 function formatTime(milliseconds) {
@@ -645,7 +708,7 @@ function renderSnapshot() {
   latencyNode.textContent = latencyMs === null ? '-' : String(latencyMs);
   networkStatus.textContent = attackMoveArmed
     ? 'ATTACK MOVE · 좌클릭으로 목표 지정'
-    : `Snapshot #${snapshot.sequence} · authoritative tick ${snapshot.serverTick} · visible units ${snapshot.units.length}`;
+    : `Lockstep ${lockstepHealth} · local ${shadowRoom?.tick ?? '-'} · Snapshot #${snapshot.sequence} · server ${snapshot.serverTick}`;
   pruneSelection();
   renderScoreboard();
   renderUpgradeState();
@@ -743,6 +806,7 @@ function handleMessage(message) {
     selectedIds.clear();
     camera.initialized = false;
     lastMatchPhase = null;
+    resetLockstepShadow();
     roomPanel.hidden = true;
     lobbyScreen.hidden = false;
     gameScreen.hidden = true;
@@ -768,7 +832,14 @@ function connect() {
   });
   socket.addEventListener('message', (event) => {
     try {
-      handleMessage(JSON.parse(event.data));
+      const message = JSON.parse(event.data);
+      if (message.type === 'lockstep-bootstrap') {
+        installLockstepBootstrap(message.bootstrap);
+      } else if (message.type === 'lockstep-frame') {
+        runLockstepFrame(message);
+      } else {
+        handleMessage(message);
+      }
     } catch {
       setNotice('서버 메시지를 해석하지 못했습니다.', true);
     }

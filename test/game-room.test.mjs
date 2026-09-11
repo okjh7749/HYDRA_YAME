@@ -168,6 +168,10 @@ test('server validates and applies upgrades for the callers team', () => {
   });
 
   assert.equal(result.ok, true);
+  assert.equal(result.queued, true);
+  assert.equal(room.state.players[0].upgrades.attack, 0);
+  assert.equal(room.state.players[0].minerals, before);
+  for (let tick = 0; tick < 3; tick += 1) tickRoom(room, 50);
   assert.equal(room.state.players[0].upgrades.attack, 1);
   assert.equal(room.state.players[0].minerals, before - 50);
 

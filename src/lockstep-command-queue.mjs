@@ -87,6 +87,25 @@ export class LockstepCommandQueue {
     return canonical;
   }
 
+  enqueueWire(wire) {
+    if (!wire || !Number.isInteger(wire.tick) || !Number.isInteger(wire.playerSlot)) return null;
+    const canonical = canonicalizeLockstepCommand(
+      wire,
+      wire.playerSlot,
+      Number.isInteger(wire.sequence) ? wire.sequence : this.nextSequence,
+      wire.tick,
+    );
+    if (!canonical) return null;
+    this.nextSequence = Math.max(this.nextSequence, (canonical.sequence + 1) >>> 0 || 1);
+    const bucket = this.buckets[canonical.tick % this.ringSize];
+    if (bucket.tick !== canonical.tick) {
+      bucket.tick = canonical.tick;
+      bucket.commands.length = 0;
+    }
+    bucket.commands.push(canonical);
+    return canonical;
+  }
+
   drain(tick) {
     const bucket = this.buckets[(tick >>> 0) % this.ringSize];
     if (bucket.tick !== (tick >>> 0)) return [];

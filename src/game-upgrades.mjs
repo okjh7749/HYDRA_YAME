@@ -122,6 +122,31 @@ function applySpeedUpgradeToExistingHydras(state, ownerSlot) {
   }
 }
 
+export function validateUpgradePurchase(state, ownerSlot, buildingId, upgradeKey) {
+  const player = playerForSlot(state, ownerSlot);
+  const building = getUpgradeBuilding(state, buildingId);
+  const definition = UPGRADE_DEFINITIONS[upgradeKey];
+  if (!player || !building || !definition) return { ok: false, reason: 'invalid-upgrade' };
+  if (building.ownerSlot !== ownerSlot || building.hp <= 0) {
+    return { ok: false, reason: 'not-owned' };
+  }
+  if (definition.buildingType !== building.type) {
+    return { ok: false, reason: 'wrong-building' };
+  }
+  const currentLevel = player.upgrades[upgradeKey] ?? 0;
+  if (currentLevel >= definition.max) return { ok: false, reason: 'max-level' };
+  if (player.minerals < definition.cost) {
+    return { ok: false, reason: 'insufficient-minerals' };
+  }
+  return {
+    ok: true,
+    upgradeKey,
+    level: currentLevel,
+    cost: definition.cost,
+    minerals: player.minerals,
+  };
+}
+
 export function purchaseUpgrade(state, ownerSlot, buildingId, upgradeKey) {
   const player = playerForSlot(state, ownerSlot);
   const building = getUpgradeBuilding(state, buildingId);
