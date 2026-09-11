@@ -15,4 +15,10 @@ test('classic mode shares the detailed RTS terrain and unit renderer', async () 
   assert.match(classic, /drawRtsUnit/);
   assert.match(classic, /drawRtsSunken/);
   assert.match(renderer, /function drawRtsUnit/);
+  assert.match(classic, /const fogCanvas = document\.createElement\('canvas'\)/);
+  assert.match(classic, /fogCtx\.globalCompositeOperation = 'destination-out'/);
+  assert.match(
+    classic,
+    /ctx\.drawImage\(fogCanvas, 0, 0, viewportWidth, viewportHeight\)/,
+  );
 });
