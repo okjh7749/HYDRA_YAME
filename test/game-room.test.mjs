@@ -148,6 +148,15 @@ test('snapshots withhold unseen enemy units until the player becomes a spectator
   assert.equal(playing.beacons.every((pad) => pad.team === playing.self.team), true);
   assert.equal(playing.self.homeX, 256);
   assert.equal(playing.self.homeY, 1408);
+  assert.equal(playing.visionSources.length > 0, true);
+  assert.equal(
+    playing.visionSources.some((source) => {
+      const dx = playing.self.homeX - source.x;
+      const dy = playing.self.homeY - source.y;
+      return dx * dx + dy * dy <= source.radius * source.radius;
+    }),
+    true,
+  );
   assert.equal(playing.buildings.length, 2);
   assert.equal(playing.buildings.every((building) => building.ownerSlot === playing.self.slot), true);
   assert.equal(playing.teams.find((team) => team.team === 1).minerals, '?');
@@ -160,6 +169,11 @@ test('snapshots withhold unseen enemy units until the player becomes a spectator
   assert.equal(spectating.buildings.length, 4);
   assert.equal(spectating.units.some((unit) => unit.id === hiddenEnemy.id), true);
   assert.equal(typeof spectating.teams.find((team) => team.team === 1).minerals, 'number');
+  assert.equal(spectating.visionSources.length, 1);
+  assert.equal(
+    spectating.visionSources[0].radius >= Math.hypot(room.map.worldWidth, room.map.worldHeight),
+    true,
+  );
 });
 
 test('finished snapshots derive victory or defeat from each clients own team', () => {

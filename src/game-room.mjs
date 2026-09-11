@@ -18,6 +18,7 @@ import {
 import {
   assignMoveOrders,
   createSimulation,
+  getVisionSources,
   isPointVisible,
   stepProduction,
 } from './game-simulation.mjs';
@@ -330,6 +331,22 @@ function teamRowsForClient(room, team, fullVision) {
   });
 }
 
+function visionSourcesForClient(room, team, fullVision) {
+  if (fullVision) {
+    return [{
+      x: room.map.worldWidth / 2,
+      y: room.map.worldHeight / 2,
+      radius: Math.hypot(room.map.worldWidth, room.map.worldHeight),
+    }];
+  }
+
+  return getVisionSources(room.state, room.map, team).map((source) => ({
+    x: source.x,
+    y: source.y,
+    radius: source.radius,
+  }));
+}
+
 export function snapshotForClient(room, clientId) {
   const roomPlayer = playerForClient(room, clientId);
   if (!roomPlayer || !room.state.match) return null;
@@ -417,6 +434,7 @@ export function snapshotForClient(room, clientId) {
     beacons,
     buildings,
     effects,
+    visionSources: visionSourcesForClient(room, team, fullVision),
   };
 }
 
