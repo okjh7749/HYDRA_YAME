@@ -138,9 +138,14 @@ export function applyLockstepFrame(room, frame, { tickMs = SERVER_TICK_MS } = {}
   return { ok: true, tick: room.tick, checksumCompared: false };
 }
 
-export function projectLockstepSnapshot(room, clientId, sequence = 0) {
+export function projectLockstepSnapshot(
+  room,
+  clientId,
+  sequence = 0,
+  { includeUnits = true } = {},
+) {
   if (!room || !clientId) return null;
-  const projected = snapshotForClient(room, clientId);
+  const projected = snapshotForClient(room, clientId, { includeUnits });
   if (!projected) return null;
   return {
     ...projected,

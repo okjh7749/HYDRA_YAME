@@ -26,6 +26,7 @@ export class UnitPool {
     this.hp = new Int32Array(this.capacity);
     this.maxHp = new Int32Array(this.capacity);
     this.facing = new Uint16Array(this.capacity);
+    this.attackFlashMs = new Uint16Array(this.capacity);
     this.flags = new Uint16Array(this.capacity);
     this.seenGeneration = new Uint32Array(this.capacity);
     this.nextFree = new Int32Array(this.capacity);
@@ -78,6 +79,7 @@ export class UnitPool {
     this.hp[index] = Math.max(0, Math.ceil(unit.hp ?? 0)) | 0;
     this.maxHp[index] = Math.max(0, Math.ceil(unit.maxHp ?? 0)) | 0;
     this.facing[index] = quantizeFacingRadians(unit.facing ?? 0);
+    this.attackFlashMs[index] = Math.max(0, Math.ceil(unit.attackFlashMs ?? 0)) & 0xffff;
     let flags = 0;
     if ((unit.hp ?? 0) > 0) flags |= 1;
     if (unit.combatTargetable !== false) flags |= 2;

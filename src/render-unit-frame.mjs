@@ -1,3 +1,5 @@
+import { facingRadiansFromQuantized, fromFixed } from './fixed-point.mjs';
+
 const UNIT_TYPE_TO_CODE = Object.freeze({
   hydra: 1,
   zealot: 2,
@@ -97,6 +99,31 @@ export function packRenderUnitFrame(units) {
     views.maxHp[index] = Math.max(0, unit.maxHp ?? 0);
     views.facing[index] = unit.facing ?? 0;
     views.attackFlashMs[index] = Math.max(0, unit.attackFlashMs ?? 0);
+  }
+  return frame;
+}
+
+export function packRenderUnitPoolFrame(unitPool, indexes) {
+  const source = Array.isArray(indexes) ? indexes : [];
+  const count = source.length;
+  const layout = layoutForCount(count);
+  const frame = { count, buffer: new ArrayBuffer(layout.byteLength) };
+  const views = viewsForFrame(frame);
+
+  for (let outputIndex = 0; outputIndex < count; outputIndex += 1) {
+    const poolIndex = source[outputIndex] | 0;
+    views.ids[outputIndex] = unitPool.id[poolIndex];
+    views.types[outputIndex] = unitPool.type[poolIndex];
+    views.ownerSlots[outputIndex] = unitPool.ownerSlot[poolIndex] < 0
+      ? 0xff
+      : unitPool.ownerSlot[poolIndex];
+    views.teams[outputIndex] = unitPool.team[poolIndex];
+    views.x[outputIndex] = fromFixed(unitPool.x[poolIndex]);
+    views.y[outputIndex] = fromFixed(unitPool.y[poolIndex]);
+    views.hp[outputIndex] = Math.max(0, unitPool.hp[poolIndex]);
+    views.maxHp[outputIndex] = Math.max(0, unitPool.maxHp[poolIndex]);
+    views.facing[outputIndex] = facingRadiansFromQuantized(unitPool.facing[poolIndex]);
+    views.attackFlashMs[outputIndex] = unitPool.attackFlashMs[poolIndex];
   }
   return frame;
 }
