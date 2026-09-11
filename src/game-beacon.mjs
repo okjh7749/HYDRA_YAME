@@ -3,6 +3,7 @@ import {
   nearestWalkablePoint,
   worldToTile,
 } from './game-core.mjs';
+import { infrastructureFrameForPlayer } from './game-infrastructure.mjs';
 import { unitOwnerSlot } from './game-ownership.mjs';
 
 export const ZEALOT_HP = 9999;
@@ -31,10 +32,7 @@ function distanceSquared(a, b) {
 }
 
 function beaconCenterForPlayer(player) {
-  return {
-    x: player.homeX,
-    y: player.homeY + BEACON_CENTER_Y_OFFSET,
-  };
+  return infrastructureFrameForPlayer(player).center;
 }
 
 function normalizedDirection(direction) {

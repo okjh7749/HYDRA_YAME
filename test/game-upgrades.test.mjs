@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { buildClassicMap } from '../src/game-core.mjs';
+import { infrastructureFrameForPlayer } from '../src/game-infrastructure.mjs';
 import {
   SUNKEN_ARMOR,
   calculateHydraAttackRange,
@@ -40,6 +41,12 @@ test('creates two selectable upgrade buildings for each of the eight players', (
   assert.equal(state.upgradeBuildings.length, 16);
 
   const local = state.upgradeBuildings.filter((building) => building.ownerSlot === 0);
+  const localPlayer = state.players[0];
+  const localFrame = infrastructureFrameForPlayer(localPlayer);
+  const teammateFrame = infrastructureFrameForPlayer(state.players[1]);
+  const homeCornerDistance = Math.hypot(localPlayer.homeX - localFrame.corner.x, localPlayer.homeY - localFrame.corner.y);
+  assert.deepEqual(localFrame.corner, teammateFrame.corner);
+  assert.equal(local.every((building) => Math.hypot(building.x - localFrame.corner.x, building.y - localFrame.corner.y) < homeCornerDistance), true);
   assert.deepEqual(local.map((building) => building.type).sort(), ['evolution', 'hydra-den']);
   assert.equal(local.every((building) => building.hp === UPGRADE_BUILDING_HP), true);
 

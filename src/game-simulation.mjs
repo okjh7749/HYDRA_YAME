@@ -185,7 +185,7 @@ function rotateOffset(offset, angle) {
   };
 }
 
-export function assignMoveOrders(map, state, unitIds, targetWorld) {
+export function assignMoveOrders(map, state, unitIds, targetWorld, { orderType = 'move' } = {}) {
   const selected = state.units.filter((unit) => unitIds.has(unit.id));
   let ordered = 0;
 
@@ -212,6 +212,9 @@ export function assignMoveOrders(map, state, unitIds, targetWorld) {
 
     unit.path = path;
     unit.pathIndex = Math.min(1, path.length);
+    unit.orderType = orderType;
+    unit.attackMoveTarget = orderType === 'attack-move'
+      ? { x: targetWorld.x, y: targetWorld.y } : null;
     ordered += 1;
   });
 

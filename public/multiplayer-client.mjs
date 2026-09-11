@@ -67,6 +67,8 @@ let frameEffects = [];
 let requestSequence = 1;
 let latencyMs = null;
 let drag = null;
+let attackMoveArmed = false;
+let minimapPointerId = null;
 const selectedIds = new Set();
 const camera = { x: 0, y: 0, initialized: false };
 const cameraInput = {
@@ -330,6 +332,35 @@ function eventToWorld(event) {
   };
 }
 
+function centerCameraAtWorld(x, y) {
+  camera.x = x - cameraWorldWidth() / 2;
+  camera.y = y - cameraWorldHeight() / 2;
+  clampCamera(camera, map, cameraWorldWidth(), cameraWorldHeight());
+}
+
+function setAttackMoveArmed(armed) {
+  attackMoveArmed = Boolean(armed);
+  battlefield.classList.toggle('attack-move', attackMoveArmed);
+  if (attackMoveArmed) networkStatus.textContent = 'ATTACK MOVE · 좌클릭으로 목표 지정';
+}
+
+function issueAttackMove(target) {
+  if (!snapshot || snapshot.self.spectator || snapshot.match.phase !== 'running') return false;
+  if (selectedIds.size === 0) return false;
+  const sent = command({
+    type: 'attack-move',
+    unitIds: [...selectedIds],
+    x: target.x,
+    y: target.y,
+  });
+  if (sent) {
+    moveMarker = { x: target.x, y: target.y, startedAt: performance.now() };
+    playUiCue('move');
+  }
+  setAttackMoveArmed(false);
+  return sent;
+}
+
 function pointOnScreen(x, y, margin = 0) {
   return x >= camera.x - margin
     && y >= camera.y - margin
@@ -588,7 +619,9 @@ function renderSnapshot() {
   gameTimer.textContent = formatTime(snapshot.match.elapsedMs);
   serverTickNode.textContent = String(snapshot.serverTick);
   latencyNode.textContent = latencyMs === null ? '-' : String(latencyMs);
-  networkStatus.textContent = `Snapshot #${snapshot.sequence} · authoritative tick ${snapshot.serverTick} · visible units ${snapshot.units.length}`;
+  networkStatus.textContent = attackMoveArmed
+    ? 'ATTACK MOVE · 좌클릭으로 목표 지정'
+    : `Snapshot #${snapshot.sequence} · authoritative tick ${snapshot.serverTick} · visible units ${snapshot.units.length}`;
   pruneSelection();
   renderScoreboard();
   renderUpgradeState();
@@ -755,6 +788,12 @@ leaveButton.addEventListener('click', () => {
 battlefield.addEventListener('pointerdown', (event) => {
   primeRtsAudio();
   if (event.button !== 0) return;
+  if (attackMoveArmed) {
+    const target = eventToWorld(event);
+    if (!issueAttackMove(target)) setAttackMoveArmed(false);
+    event.preventDefault();
+    return;
+  }
   const world = eventToWorld(event);
   drag = { start: world, current: world };
   battlefield.setPointerCapture(event.pointerId);
@@ -784,6 +823,7 @@ battlefield.addEventListener('pointercancel', () => {
 battlefield.addEventListener('contextmenu', (event) => {
   primeRtsAudio();
   event.preventDefault();
+  setAttackMoveArmed(false);
   if (!snapshot || selectedIds.size === 0 || snapshot.self.spectator) return;
   const target = eventToWorld(event);
   if (command({
@@ -909,13 +949,13 @@ function updateCamera(deltaMs) {
   if (!camera.initialized || gameScreen.hidden) return;
   let dx = 0;
   let dy = 0;
-  if (cameraInput.keys.has('KeyA') || cameraInput.keys.has('ArrowLeft')) dx -= 1;
+  if (cameraInput.keys.has('ArrowLeft')) dx -= 1;
   if (cameraInput.keys.has('KeyD') || cameraInput.keys.has('ArrowRight')) dx += 1;
   if (cameraInput.keys.has('KeyW') || cameraInput.keys.has('ArrowUp')) dy -= 1;
   if (cameraInput.keys.has('KeyS') || cameraInput.keys.has('ArrowDown')) dy += 1;
 
-  const edge = 22;
-  if (cameraInput.inside && !drag) {
+  const edge = 30;
+  if (cameraInput.inside && !drag && minimapPointerId === null) {
     if (cameraInput.pointerX < edge) dx -= 1;
     if (cameraInput.pointerX > viewportWidth - edge) dx += 1;
     if (cameraInput.pointerY < edge) dy -= 1;
@@ -962,40 +1002,83 @@ window.addEventListener('keydown', (event) => {
     event.preventDefault();
     return;
   }
+  if (!gameScreen.hidden && event.code === 'KeyA') {
+    if (
+      !event.repeat
+      && selectedIds.size > 0
+      && !snapshot?.self.spectator
+      && snapshot?.match.phase === 'running'
+    ) setAttackMoveArmed(true);
+    event.preventDefault();
+    return;
+  }
+  if (!gameScreen.hidden && event.code === 'Escape' && attackMoveArmed) {
+    setAttackMoveArmed(false);
+    event.preventDefault();
+    return;
+  }
   cameraInput.keys.add(event.code);
   if (!gameScreen.hidden && (
     event.code.startsWith('Arrow')
-    || ['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(event.code)
+    || ['KeyW', 'KeyS', 'KeyD'].includes(event.code)
   )) {
     event.preventDefault();
   }
 });
 window.addEventListener('keyup', (event) => cameraInput.keys.delete(event.code));
 
-battlefield.addEventListener('pointermove', (event) => {
+window.addEventListener('pointermove', (event) => {
+  if (gameScreen.hidden) {
+    cameraInput.inside = false;
+    return;
+  }
   const rect = battlefield.getBoundingClientRect();
-  cameraInput.pointerX = event.clientX - rect.left;
-  cameraInput.pointerY = event.clientY - rect.top;
-  cameraInput.inside = true;
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  const overUi = event.target?.closest?.('.hud-panel, .minimap-panel');
+  cameraInput.pointerX = Math.max(0, Math.min(rect.width, x));
+  cameraInput.pointerY = Math.max(0, Math.min(rect.height, y));
+  cameraInput.inside = !overUi && x >= 0 && y >= 0 && x <= rect.width && y <= rect.height;
 });
-battlefield.addEventListener('pointerenter', () => {
-  cameraInput.inside = true;
-});
-battlefield.addEventListener('pointerleave', () => {
+window.addEventListener('blur', () => {
   cameraInput.inside = false;
+  cameraInput.keys.clear();
+  setAttackMoveArmed(false);
 });
 
-minimap.addEventListener('pointerdown', (event) => {
+function panCameraFromMinimap(event) {
   if (!camera.initialized) return;
   const rect = minimap.getBoundingClientRect();
   const worldX = ((event.clientX - rect.left) / rect.width) * map.worldWidth;
   const worldY = ((event.clientY - rect.top) / rect.height) * map.worldHeight;
-  camera.x = worldX - cameraWorldWidth() / 2;
-  camera.y = worldY - cameraWorldHeight() / 2;
-  clampCamera(camera, map, cameraWorldWidth(), cameraWorldHeight());
+  centerCameraAtWorld(worldX, worldY);
   renderBattlefield();
   drawMinimap();
+}
+
+minimap.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0) return;
+  minimapPointerId = event.pointerId;
+  minimap.setPointerCapture(event.pointerId);
+  panCameraFromMinimap(event);
+  event.preventDefault();
 });
+
+minimap.addEventListener('pointermove', (event) => {
+  if (minimapPointerId !== event.pointerId || (event.buttons & 1) === 0) return;
+  panCameraFromMinimap(event);
+});
+
+function releaseMinimapPointer(event) {
+  if (minimapPointerId !== event.pointerId) return;
+  if (minimap.hasPointerCapture(event.pointerId)) {
+    minimap.releasePointerCapture(event.pointerId);
+  }
+  minimapPointerId = null;
+}
+
+minimap.addEventListener('pointerup', releaseMinimapPointer);
+minimap.addEventListener('pointercancel', releaseMinimapPointer);
 
 requestAnimationFrame(animationFrame);
 connect();

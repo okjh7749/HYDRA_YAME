@@ -10,6 +10,7 @@ import {
 } from '../src/game-beacon.mjs';
 import { initializeCombatState } from '../src/game-combat.mjs';
 import { buildClassicMap, isWalkableWorld } from '../src/game-core.mjs';
+import { infrastructureFrameForPlayer } from '../src/game-infrastructure.mjs';
 import {
   MAX_HYDRA_SEPARATION_PUSH,
   stepFormationMovement,
@@ -57,6 +58,14 @@ test('teammates receive separate beacon controls at their own homes', () => {
   const teammate = state.units.find((unit) => unit.type === 'zealot' && unit.ownerSlot === 1);
   const firstPads = beaconPadsForPlayer(state, 0);
   const teammatePads = beaconPadsForPlayer(state, 1);
+
+  const firstPlayer = state.players[0];
+  const teammatePlayer = state.players[1];
+  const firstFrame = infrastructureFrameForPlayer(firstPlayer);
+  const teammateFrame = infrastructureFrameForPlayer(teammatePlayer);
+  assert.deepEqual(firstFrame.corner, teammateFrame.corner);
+  assert.ok(Math.hypot(first.x - firstFrame.corner.x, first.y - firstFrame.corner.y) < Math.hypot(firstPlayer.homeX - firstFrame.corner.x, firstPlayer.homeY - firstFrame.corner.y));
+  assert.ok(Math.hypot(teammate.x - teammateFrame.corner.x, teammate.y - teammateFrame.corner.y) < Math.hypot(teammatePlayer.homeX - teammateFrame.corner.x, teammatePlayer.homeY - teammateFrame.corner.y));
 
   assert.ok(first);
   assert.ok(teammate);

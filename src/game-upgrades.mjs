@@ -2,6 +2,7 @@ import {
   HYDRA_SPEED,
   HYDRA_SPEED_UPGRADE_MULTIPLIER,
 } from './game-simulation.mjs';
+import { upgradeBuildingPositionsForPlayer } from './game-infrastructure.mjs';
 import { playerBySlot, unitOwnerSlot } from './game-ownership.mjs';
 
 export const UPGRADE_BUILDING_HP = 9999;
@@ -38,8 +39,8 @@ export const UPGRADE_DEFINITIONS = Object.freeze({
 });
 
 const BUILDING_LAYOUT = Object.freeze([
-  Object.freeze({ type: 'hydra-den', label: 'Hydralisk Den', shortLabel: 'HD', dx: -52, dy: 52 }),
-  Object.freeze({ type: 'evolution', label: 'Evolution Chamber', shortLabel: 'EV', dx: 52, dy: 52 }),
+  Object.freeze({ type: 'hydra-den', label: 'Hydralisk Den', shortLabel: 'HD' }),
+  Object.freeze({ type: 'evolution', label: 'Evolution Chamber', shortLabel: 'EV' }),
 ]);
 
 function playerForSlot(state, ownerSlot) {
@@ -57,7 +58,9 @@ export function initializeUpgradeBuildings(state) {
   state.upgradeBuildings = [];
 
   for (const player of state.players ?? []) {
-    for (const layout of BUILDING_LAYOUT) {
+    const positions = upgradeBuildingPositionsForPlayer(player);
+    for (const [index, layout] of BUILDING_LAYOUT.entries()) {
+      const position = positions[index];
       state.upgradeBuildings.push({
         id: `upgrade-${player.slot}-${layout.type}`,
         type: layout.type,
@@ -65,8 +68,8 @@ export function initializeUpgradeBuildings(state) {
         shortLabel: layout.shortLabel,
         ownerSlot: player.slot,
         team: player.team,
-        x: player.homeX + layout.dx,
-        y: player.homeY + layout.dy,
+        x: position.x,
+        y: position.y,
         hp: UPGRADE_BUILDING_HP,
         maxHp: UPGRADE_BUILDING_HP,
       });
