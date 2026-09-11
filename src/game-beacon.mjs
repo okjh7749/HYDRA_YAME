@@ -74,11 +74,11 @@ export function initializeBeaconSystem(state, map) {
   state.beaconCenters = new Map();
 
   for (const player of state.players ?? []) {
-    let center = state.beaconCenters.get(player.team);
+    let center = state.beaconCenters.get(player.slot);
     if (!center) {
       const rawCenter = beaconCenterForPlayer(player);
       center = nearestWalkablePoint(map, rawCenter.x, rawCenter.y, 8) ?? rawCenter;
-      state.beaconCenters.set(player.team, center);
+      state.beaconCenters.set(player.slot, center);
 
       for (const direction of BEACON_DIRECTIONS) {
         const normalized = normalizedDirection(direction);
@@ -88,7 +88,8 @@ export function initializeBeaconSystem(state, map) {
         };
         const point = nearestWalkablePoint(map, desired.x, desired.y, 4) ?? desired;
         state.beaconPads.push({
-          id: `beacon-${player.team}-${direction.key}`,
+          id: `beacon-${player.slot}-${direction.key}`,
+          ownerSlot: player.slot,
           team: player.team,
           direction: direction.key,
           targetZoneId: direction.targetZoneId,
@@ -112,6 +113,10 @@ export function initializeBeaconSystem(state, map) {
 
 export function beaconPadsForTeam(state, team) {
   return (state.beaconPads ?? []).filter((pad) => pad.team === team);
+}
+
+export function beaconPadsForPlayer(state, ownerSlot) {
+  return (state.beaconPads ?? []).filter((pad) => pad.ownerSlot === ownerSlot);
 }
 
 export function issueTeamHydraRally(state, map, team, targetZoneId) {
@@ -177,7 +182,7 @@ export function issuePlayerHydraRally(state, map, ownerSlot, targetZoneId) {
 }
 
 function sendZealotHome(state, map, zealot) {
-  const center = state.beaconCenters?.get(zealot.team);
+  const center = state.beaconCenters?.get(unitOwnerSlot(zealot));
   if (!center) return;
   const path = findPath(map, zealot, center);
   zealot.path = path;
@@ -195,7 +200,7 @@ export function stepBeaconSystem(state, map, deltaMs) {
     zealot.beaconCooldownMs = Math.max(0, (zealot.beaconCooldownMs ?? 0) - deltaMs);
     if (zealot.beaconCooldownMs > 0) continue;
 
-    const pad = beaconPadsForTeam(state, zealot.team).find(
+    const pad = beaconPadsForPlayer(state, unitOwnerSlot(zealot)).find(
       (candidate) => distanceSquared(zealot, candidate) <= candidate.radius * candidate.radius,
     );
     if (!pad) continue;

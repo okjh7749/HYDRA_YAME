@@ -144,6 +144,7 @@ test('snapshots withhold unseen enemy units until the player becomes a spectator
   const playing = snapshotForClient(room, 'host');
   assert.equal(playing.units.some((unit) => unit.id === hiddenEnemy.id), false);
   assert.equal(playing.beacons.length, 8);
+  assert.equal(playing.beacons.every((pad) => pad.ownerSlot === playing.self.slot), true);
   assert.equal(playing.beacons.every((pad) => pad.team === playing.self.team), true);
   assert.equal(playing.self.homeX, 256);
   assert.equal(playing.self.homeY, 1408);
@@ -155,7 +156,7 @@ test('snapshots withhold unseen enemy units until the player becomes a spectator
   room.state.players[0].status = 'eliminated';
   const spectating = snapshotForClient(room, 'host');
   assert.equal(spectating.self.spectator, true);
-  assert.equal(spectating.beacons.length, 32);
+  assert.equal(spectating.beacons.length, 64);
   assert.equal(spectating.buildings.length, 4);
   assert.equal(spectating.units.some((unit) => unit.id === hiddenEnemy.id), true);
   assert.equal(typeof spectating.teams.find((team) => team.team === 1).minerals, 'number');

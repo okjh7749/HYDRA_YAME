@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   BEACON_DIRECTIONS,
+  beaconPadsForPlayer,
   beaconPadsForTeam,
   initializeBeaconSystem,
   stepBeaconSystem,
@@ -28,15 +29,18 @@ function setup() {
   return { map, state };
 }
 
-test('creates one selectable beacon zealot and eight directional pads for every team', () => {
+test('creates one selectable beacon zealot and eight directional pads for every player', () => {
   const { state } = setup();
 
   const zealots = state.units.filter((unit) => unit.type === 'zealot' && unit.beaconController);
   assert.equal(zealots.length, 8);
-  assert.equal(state.beaconPads.length, 32);
+  assert.equal(state.beaconPads.length, 64);
 
-  const localPads = beaconPadsForTeam(state, 0);
+  const teamPads = beaconPadsForTeam(state, 0);
+  assert.equal(teamPads.length, 16);
+  const localPads = beaconPadsForPlayer(state, 0);
   assert.equal(localPads.length, 8);
+  assert.equal(localPads.every((pad) => pad.ownerSlot === 0), true);
   assert.deepEqual(
     localPads.map((pad) => pad.direction),
     BEACON_DIRECTIONS.map((direction) => direction.key),
@@ -47,6 +51,21 @@ test('creates one selectable beacon zealot and eight directional pads for every 
   );
 });
 
+test('teammates receive separate beacon controls at their own homes', () => {
+  const { state } = setup();
+  const first = state.units.find((unit) => unit.type === 'zealot' && unit.ownerSlot === 0);
+  const teammate = state.units.find((unit) => unit.type === 'zealot' && unit.ownerSlot === 1);
+  const firstPads = beaconPadsForPlayer(state, 0);
+  const teammatePads = beaconPadsForPlayer(state, 1);
+
+  assert.ok(first);
+  assert.ok(teammate);
+  assert.notDeepEqual({ x: first.x, y: first.y }, { x: teammate.x, y: teammate.y });
+  assert.equal(firstPads.length, 8);
+  assert.equal(teammatePads.length, 8);
+  assert.notDeepEqual(firstPads.map((pad) => pad.id), teammatePads.map((pad) => pad.id));
+});
+
 test('a zealot entering a beacon pad rallies all friendly hydras and returns home', () => {
   const { map, state } = setup();
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
@@ -55,7 +74,7 @@ test('a zealot entering a beacon pad rallies all friendly hydras and returns hom
   const localHydra = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
   const teammateHydra = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 1);
   const enemyHydra = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 2);
-  const pad = beaconPadsForTeam(state, 0).find((candidate) => candidate.direction === 'SE');
+  const pad = beaconPadsForPlayer(state, 0).find((candidate) => candidate.direction === 'SE');
 
   zealot.x = pad.x;
   zealot.y = pad.y;
@@ -78,7 +97,7 @@ test('a zealot entering a beacon pad rallies all friendly hydras and returns hom
 test('a new manual command can override the zealot return order while it is moving', () => {
   const { map, state } = setup();
   const zealot = state.units.find((unit) => unit.type === 'zealot' && unit.ownerSlot === 0);
-  const pad = beaconPadsForTeam(state, 0).find((candidate) => candidate.direction === 'E');
+  const pad = beaconPadsForPlayer(state, 0).find((candidate) => candidate.direction === 'E');
 
   zealot.x = pad.x;
   zealot.y = pad.y;
