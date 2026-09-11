@@ -1,4 +1,5 @@
 import { randomInt, randomUUID } from 'node:crypto';
+import { serializeLockstepBootstrap } from './lockstep-sync.mjs';
 import {
   SERVER_TICK_MS,
   createRoom,
@@ -69,14 +70,38 @@ export function createMultiplayerHub({ tickMs = SERVER_TICK_MS } = {}) {
     }
   }
 
-  function sendLockstepCommand(room, command) {
-    if (!command) return;
+  function lockstepBootstrapMessage(room) {
+    return {
+      type: 'lockstep-bootstrap',
+      roomId: room.id,
+      bootstrap: serializeLockstepBootstrap(room),
+    };
+  }
+
+  function sendLockstepBootstrap(room) {
+    const message = lockstepBootstrapMessage(room);
     for (const session of connectedSessionsForRoom(room.id)) {
-      session.peer.sendJson({
-        type: 'lockstep-command',
-        roomId: room.id,
-        command,
-      });
+      session.peer.sendJson(message);
+    }
+  }
+
+  function sendLockstepBootstrapToSession(room, session) {
+    session.peer.sendJson(lockstepBootstrapMessage(room));
+  }
+
+  function sendLockstepFrame(room) {
+    const commands = (room.lastLockstepExecutions ?? []).map((entry) => entry.command);
+    const frame = {
+      type: 'lockstep-frame',
+      roomId: room.id,
+      tick: Math.max(0, room.tick - 1),
+      serverTick: room.tick,
+      commands,
+      checksum: room.stateChecksumTick === room.tick ? room.stateChecksum >>> 0 : null,
+      checksumTick: room.stateChecksumTick === room.tick ? room.stateChecksumTick : null,
+    };
+    for (const session of connectedSessionsForRoom(room.id)) {
+      session.peer.sendJson(frame);
     }
   }
 
@@ -175,13 +200,18 @@ export function createMultiplayerHub({ tickMs = SERVER_TICK_MS } = {}) {
         return;
       }
       sendLobby(room);
+      sendLockstepBootstrap(room);
       sendSnapshots(room);
+      return;
+    }
+
+    if (message.type === 'lockstep-resync') {
+      sendLockstepBootstrapToSession(room, session);
       return;
     }
 
     if (message.type === 'command') {
       const result = handleRoomCommand(room, session.clientId, message.command);
-      if (result.lockstepCommand) sendLockstepCommand(room, result.lockstepCommand);
       peer.sendJson({
         type: 'command-result',
         requestId,
@@ -223,6 +253,7 @@ export function createMultiplayerHub({ tickMs = SERVER_TICK_MS } = {}) {
       if (room.status !== 'running') continue;
       const previousStatus = room.status;
       tickRoom(room, tickMs);
+      sendLockstepFrame(room);
       const shouldSnapshot = roomNeedsSnapshot(room);
       if (shouldSnapshot || room.status !== previousStatus) sendSnapshots(room);
       if (room.status !== previousStatus) sendLobby(room);

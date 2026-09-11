@@ -1,5 +1,5 @@
 import { initializeBeaconSystem, stepBeaconSystem } from './game-beacon.mjs';
-import { computeDeterministicStateChecksum } from './deterministic-state.mjs';
+import { computeStableLockstepChecksum as computeDeterministicStateChecksum } from './lockstep-checksum.mjs';
 import { quantizeSimulationState } from './deterministic-state.mjs';
 import { fromFixed } from './fixed-point.mjs';
 import {
@@ -32,6 +32,7 @@ import {
 import {
   initializeUpgradeBuildings,
   purchaseUpgrade,
+  validateUpgradePurchase,
 } from './game-upgrades.mjs';
 import { setZoneOwner, unitOwnerSlot, zoneOwnerSlot } from './game-ownership.mjs';
 import { UnitPool } from './unit-pool.mjs';
@@ -307,13 +308,24 @@ export function handleRoomCommand(room, clientId, command) {
   }
 
   if (command.type === 'upgrade') {
-    const result = purchaseUpgrade(
-      room.state,
-      player.slot,
-      String(command.buildingId ?? ''),
-      String(command.upgradeKey ?? ''),
-    );
-    return { ...result, type: 'upgrade' };
+    const buildingId = String(command.buildingId ?? '');
+    const upgradeKey = String(command.upgradeKey ?? '');
+    const validation = validateUpgradePurchase(room.state, player.slot, buildingId, upgradeKey);
+    if (!validation.ok) return { ...validation, type: 'upgrade' };
+    const scheduled = room.lockstepQueue.schedule(room.tick, player.slot, {
+      type: 'upgrade',
+      buildingId,
+      upgradeKey,
+    });
+    if (!scheduled) return { ok: false, reason: 'invalid-command', type: 'upgrade' };
+    return {
+      ok: true,
+      type: 'upgrade',
+      queued: true,
+      tick: scheduled.tick,
+      lockstepCommand: lockstepCommandToWire(scheduled),
+      cost: validation.cost,
+    };
   }
 
   return { ok: false, reason: 'unknown-command' };
