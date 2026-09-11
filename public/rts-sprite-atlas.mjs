@@ -246,6 +246,7 @@ export function drawAtlasSprite(ctx, atlas, state, frame, direction, x, y, scale
     column * size,
     row * size,
     size,
+    size,
     x - (size * scale) / 2,
     y - (size * scale) / 2,
     size * scale,

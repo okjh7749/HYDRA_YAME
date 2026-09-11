@@ -33,4 +33,9 @@ test('classic and multiplayer use the sprite-atlas RTS renderer', async () => {
   assert.match(atlas, /SPRITE_FRAMES_PER_DIRECTION/);
   assert.match(atlas, /drawAtlasSprite/);
   assert.match(atlas, /ctx\.drawImage/);
+  assert.match(
+    atlas,
+    /ctx\.drawImage\(\s*atlas\.canvas,\s*column \* size,\s*row \* size,\s*size,\s*size,/,
+    'sprite atlas drawImage must provide both source width and source height before destination coordinates',
+  );
 });
