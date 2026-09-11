@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { initializeBeaconSystem } from '../src/game-beacon.mjs';
 import { initializeCombatState } from '../src/game-combat.mjs';
+import { initializeUpgradeBuildings } from '../src/game-upgrades.mjs';
 
 import { buildClassicMap, isWalkableWorld } from '../src/game-core.mjs';
 import {
@@ -36,6 +37,34 @@ test('creates the local overlord and gives the starting base live vision', () =>
   assert.equal(isPointVisible(state, map, 0, localHome.x, localHome.y), true);
   assert.equal(isPointVisible(state, map, 0, allyHome.x, allyHome.y), true);
   assert.equal(isPointVisible(state, map, 0, enemyHome.x, enemyHome.y), false);
+});
+
+test('solo local start exposes the home base, beacon controller, buildings, and first hydra', () => {
+  const map = buildClassicMap();
+  const state = createSimulation(map, { localTeam: 0 });
+  initializeCombatState(state, map);
+  initializeUpgradeBuildings(state);
+  initializeBeaconSystem(state, map);
+
+  const home = map.zones.find((zone) => zone.ownerSlot === state.localPlayerSlot);
+  const ownBuildings = state.upgradeBuildings.filter(
+    (building) => building.ownerSlot === state.localPlayerSlot && building.hp > 0,
+  );
+  const ownBeacon = state.units.find(
+    (unit) => unit.type === 'zealot' && unit.ownerSlot === state.localPlayerSlot,
+  );
+
+  assert.ok(home);
+  assert.equal(ownBuildings.length, 2);
+  assert.ok(ownBeacon);
+  assert.equal(isPointVisible(state, map, state.localTeam, home.x, home.y), true);
+
+  stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
+  const hydra = state.units.find(
+    (unit) => unit.type === 'hydra' && unit.ownerSlot === state.localPlayerSlot,
+  );
+  assert.ok(hydra);
+  assert.equal(isPointVisible(state, map, state.localTeam, hydra.x, hydra.y), true);
 });
 
 test('every owned sunken produces one hydra every 500ms', () => {

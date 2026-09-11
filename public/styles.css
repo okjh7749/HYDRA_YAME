@@ -11,7 +11,7 @@
 
 body {
   margin: 0;
-  min-width: 960px;
+  min-width: 320px;
   min-height: 100vh;
   background:
     radial-gradient(circle at top, rgba(36, 61, 68, 0.28), transparent 34rem),
@@ -93,6 +93,20 @@ body {
   background: rgba(3, 10, 12, 0.76);
   color: #b7c9ca;
   font-size: 11px;
+}
+
+.home-camera {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 6;
+  padding: 7px 10px;
+  border: 1px solid #5f8e91;
+  border-radius: 3px;
+  background: rgba(7, 20, 23, 0.88);
+  color: #e9ffff;
+  font: 700 11px ui-monospace, monospace;
+  cursor: pointer;
 }
 
 .bottom-panel {
@@ -215,4 +229,25 @@ body {
   color: #d4c891;
   font-size: 11px;
   line-height: 1.45;
+}
+
+@media (max-width: 700px) {
+  .shell { padding: 6px; }
+
+  .hud {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .stats {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    font-size: 11px;
+  }
+
+  .viewport-wrap { height: 58svh; min-height: 420px; }
+  .bottom-panel { grid-template-columns: 1fr; }
+  .map-card #minimap { width: 100%; height: auto; }
 }

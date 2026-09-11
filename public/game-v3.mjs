@@ -77,6 +77,10 @@ initializeCombatState(simulation, map);
 initializeUpgradeBuildings(simulation);
 initializeBeaconSystem(simulation, map);
 
+const localHomeZone = map.zones.find(
+  (zone) => zone.ownerSlot === simulation.localPlayerSlot,
+) ?? map.zones[0];
+
 const initialOverlord = simulation.units.find(
   (unit) => unit.type === 'overlord' && unit.ownerSlot === simulation.localPlayerSlot,
 );
@@ -86,8 +90,8 @@ let selectedBuildingId = null;
 zoneCountNode.textContent = String(map.zones.length);
 
 const camera = {
-  x: Math.max(0, map.zones[0].x - 340),
-  y: Math.max(0, map.zones[0].y - 260),
+  x: 0,
+  y: 0,
 };
 
 const input = {
@@ -115,6 +119,16 @@ function resizeCanvas() {
   gameCanvas.width = Math.round(rect.width * dpr);
   gameCanvas.height = Math.round(rect.height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  clampCamera(camera, map, viewportWidth, viewportHeight);
+}
+
+function centerCameraOnLocalHome() {
+  const focusX = initialOverlord
+    ? (localHomeZone.x * 2 + initialOverlord.x) / 3 : localHomeZone.x;
+  const focusY = initialOverlord
+    ? (localHomeZone.y * 2 + initialOverlord.y) / 3 : localHomeZone.y;
+  camera.x = focusX - viewportWidth / 2;
+  camera.y = focusY - viewportHeight / 2;
   clampCamera(camera, map, viewportWidth, viewportHeight);
 }
 
@@ -391,8 +405,7 @@ function drawMinimap() {
       if (!isWalkableTile(map, x, y)) continue;
       const worldX = (x + 0.5) * map.tileSize;
       const worldY = (y + 0.5) * map.tileSize;
-      if (!pointVisible(worldX, worldY)) continue;
-      miniCtx.fillStyle = '#303a3f';
+      miniCtx.fillStyle = pointVisible(worldX, worldY) ? '#39494f' : '#11191c';
       miniCtx.fillRect(
         x * map.tileSize * scaleX,
         y * map.tileSize * scaleY,
@@ -410,6 +423,25 @@ function drawMinimap() {
     miniCtx.fill();
   }
 
+  for (const pad of beaconPadsForTeam(simulation, LOCAL_TEAM)) {
+    miniCtx.fillStyle = '#a5edf4';
+    miniCtx.fillRect(pad.x * scaleX - 1, pad.y * scaleY - 1, 2, 2);
+  }
+
+  for (const building of simulation.upgradeBuildings ?? []) {
+    if (building.hp <= 0) continue;
+    if (!(building.team === LOCAL_TEAM || pointVisible(building.x, building.y))) continue;
+    const own = building.ownerSlot === simulation.localPlayerSlot;
+    const x = building.x * scaleX;
+    const y = building.y * scaleY;
+    const size = own ? 5 : 4;
+    miniCtx.fillStyle = '#091113';
+    miniCtx.fillRect(x - size / 2 - 1, y - size / 2 - 1, size + 2, size + 2);
+    miniCtx.strokeStyle = teamColors[building.team] ?? '#dbe8e8';
+    miniCtx.lineWidth = own ? 1.3 : 1;
+    miniCtx.strokeRect(x - size / 2, y - size / 2, size, size);
+  }
+
   for (const unit of simulation.units) {
     if (!unitIsVisible(unit)) continue;
     miniCtx.fillStyle = unit.type === 'overlord'
@@ -425,6 +457,12 @@ function drawMinimap() {
     );
     miniCtx.fill();
   }
+
+  miniCtx.strokeStyle = '#eaffff';
+  miniCtx.lineWidth = 1;
+  miniCtx.beginPath();
+  miniCtx.arc(localHomeZone.x * scaleX, localHomeZone.y * scaleY, 6, 0, Math.PI * 2);
+  miniCtx.stroke();
 
   const view = cameraRect(camera, viewportWidth, viewportHeight);
   miniCtx.strokeStyle = '#e7fbff';
@@ -682,8 +720,19 @@ for (const button of upgradePanelNode.querySelectorAll('button[data-upgrade]')) 
   });
 }
 
+document.querySelector('#homeCameraButton')?.addEventListener('click', () => {
+  centerCameraOnLocalHome();
+  render(true);
+});
+
 window.addEventListener('resize', resizeCanvas);
 window.addEventListener('keydown', (event) => {
+  if (event.code === 'KeyH') {
+    centerCameraOnLocalHome();
+    render(true);
+    event.preventDefault();
+    return;
+  }
   input.keys.add(event.code);
   if (event.code.startsWith('Arrow')) event.preventDefault();
 });
@@ -744,6 +793,7 @@ minimap.addEventListener('pointerdown', (event) => {
 });
 
 resizeCanvas();
+centerCameraOnLocalHome();
 updateHud();
 render(true);
 requestAnimationFrame(frame);
