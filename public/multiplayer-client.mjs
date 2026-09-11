@@ -1,5 +1,9 @@
 import { buildClassicMap, clampCamera, isWalkableTile } from '/src/game-core.mjs';
-import { applyLockstepFrame, restoreLockstepRoom } from '/src/lockstep-sync.mjs';
+import {
+  applyLockstepFrame,
+  projectLockstepSnapshot,
+  restoreLockstepRoom,
+} from '/src/lockstep-sync.mjs';
 import {
   RTS_CAMERA_ZOOM,
   SNAPSHOT_INTERPOLATION_MS,
@@ -67,6 +71,8 @@ let lockstepHealth = 'WAITING';
 let lockstepResyncPending = false;
 let lockstepChecksumChecks = 0;
 let lockstepResyncs = 0;
+let localSnapshotSequence = 1;
+let lastServerSnapshotSequence = -1;
 let snapshotReceivedAt = performance.now();
 let moveMarker = null;
 let visualFrameTime = performance.now();
@@ -114,6 +120,36 @@ function command(commandPayload) {
   });
 }
 
+function acceptSnapshot(message, { source = 'server' } = {}) {
+  previousSnapshot = snapshot;
+  previousUnitsById = new Map((previousSnapshot?.units ?? []).map((unit) => [unit.id, unit]));
+  snapshot = message;
+  fogCacheKey = '';
+  snapshotReceivedAt = performance.now();
+  const impactWindowMs = source === 'lockstep' ? 5 : 55;
+  for (const effect of message.effects ?? []) {
+    if ((effect.elapsedMs ?? 0) <= impactWindowMs) playCombatImpact(effect);
+  }
+  renderSnapshot();
+}
+
+function lockstepRenderingHealthy() {
+  return Boolean(
+    shadowRoom
+    && !lockstepResyncPending
+    && lockstepResyncs < 3
+    && lockstepHealth !== 'SNAPSHOT FALLBACK',
+  );
+}
+
+function renderLocalLockstepSnapshot() {
+  if (!shadowRoom || !clientId) return false;
+  const projected = projectLockstepSnapshot(shadowRoom, clientId, localSnapshotSequence++);
+  if (!projected) return false;
+  acceptSnapshot(projected, { source: 'lockstep' });
+  return true;
+}
+
 function requestLockstepResync(reason) {
   if (lockstepResyncPending || lockstepResyncs >= 3) {
     if (lockstepResyncs >= 3) lockstepHealth = 'SNAPSHOT FALLBACK';
@@ -139,6 +175,7 @@ function installLockstepBootstrap(bootstrap) {
       return;
     }
     lockstepHealth = 'SYNCED';
+    renderLocalLockstepSnapshot();
   } catch {
     shadowRoom = null;
     lockstepHealth = 'BOOTSTRAP ERROR';
@@ -160,6 +197,7 @@ function runLockstepFrame(frame) {
   } else {
     lockstepHealth = 'RUNNING';
   }
+  renderLocalLockstepSnapshot();
   return result;
 }
 
@@ -169,6 +207,8 @@ function resetLockstepShadow() {
   lockstepResyncPending = false;
   lockstepChecksumChecks = 0;
   lockstepResyncs = 0;
+  localSnapshotSequence = 1;
+  lastServerSnapshotSequence = -1;
 }
 
 function formatTime(milliseconds) {
@@ -770,16 +810,10 @@ function handleMessage(message) {
   }
 
   if (message.type === 'snapshot') {
-    if (snapshot && message.sequence < snapshot.sequence) return;
-    previousSnapshot = snapshot;
-    previousUnitsById = new Map((previousSnapshot?.units ?? []).map((unit) => [unit.id, unit]));
-    snapshot = message;
-    fogCacheKey = '';
-    snapshotReceivedAt = performance.now();
-    for (const effect of message.effects ?? []) {
-      if ((effect.elapsedMs ?? 0) <= 55) playCombatImpact(effect);
-    }
-    renderSnapshot();
+    if (message.sequence < lastServerSnapshotSequence) return;
+    lastServerSnapshotSequence = message.sequence;
+    if (lockstepRenderingHealthy()) return;
+    acceptSnapshot(message, { source: 'server' });
     return;
   }
 

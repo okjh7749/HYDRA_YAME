@@ -35,6 +35,10 @@ test('multiplayer match uses a full-screen camera viewport with in-world HUD', a
   assert.match(client, /function panCameraFromMinimap\(/);
   assert.match(client, /minimap\.addEventListener\('pointermove'/);
   assert.match(html, /A\+CLICK: ATTACK MOVE/);
+  assert.match(client, /projectLockstepSnapshot/);
+  assert.match(client, /function lockstepRenderingHealthy\(\)/);
+  assert.match(client, /if \(lockstepRenderingHealthy\(\)\) return;/);
+  assert.match(client, /lockstepResyncs < 3/);
 });
 
 test('multiplayer snapshots render visible MASS ASSAULT beacon pads', async () => {

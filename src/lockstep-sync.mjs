@@ -1,5 +1,5 @@
 import { buildClassicMap } from './game-core.mjs';
-import { SERVER_TICK_MS, tickRoom } from './game-room.mjs';
+import { SERVER_TICK_MS, snapshotForClient, tickRoom } from './game-room.mjs';
 import { computeStableLockstepChecksum } from './lockstep-checksum.mjs';
 import { LockstepCommandQueue } from './lockstep-command-queue.mjs';
 import { UnitPool } from './unit-pool.mjs';
@@ -136,4 +136,17 @@ export function applyLockstepFrame(room, frame, { tickMs = SERVER_TICK_MS } = {}
   }
 
   return { ok: true, tick: room.tick, checksumCompared: false };
+}
+
+export function projectLockstepSnapshot(room, clientId, sequence = 0) {
+  if (!room || !clientId) return null;
+  const projected = snapshotForClient(room, clientId);
+  if (!projected) return null;
+  return {
+    ...projected,
+    sequence,
+    serverTick: room.tick,
+    snapshotIntervalMs: SERVER_TICK_MS,
+    source: 'lockstep-local',
+  };
 }
