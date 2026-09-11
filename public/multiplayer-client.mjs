@@ -211,6 +211,152 @@ function resetLockstepShadow() {
   lastServerSnapshotSequence = -1;
 }
 
+let lockstepWorker = null;
+let lockstepWorkerReady = false;
+let lockstepWorkerFailed = false;
+let lockstepLocalTick = null;
+let lockstepFrameSerial = 0;
+let lockstepFrameAck = 0;
+let lockstepWorkerBacklog = 0;
+
+function lockstepWorkerBacklogDepth() {
+  return Math.max(0, lockstepFrameSerial - lockstepFrameAck);
+}
+
+function stopLockstepWorker({ failed = false } = {}) {
+  lockstepWorker?.terminate();
+  lockstepWorker = null;
+  lockstepWorkerReady = false;
+  lockstepWorkerFailed = failed;
+  lockstepLocalTick = null;
+  lockstepFrameSerial = 0;
+  lockstepFrameAck = 0;
+  lockstepWorkerBacklog = 0;
+}
+
+function handleLockstepWorkerMessage(event) {
+  const message = event.data ?? {};
+  if (message.type === 'ready') {
+    lockstepWorkerReady = true;
+    lockstepResyncPending = false;
+    lockstepResyncs = 0;
+    lockstepLocalTick = message.localTick ?? lockstepLocalTick;
+    lockstepHealth = 'SYNCED';
+    return;
+  }
+
+  if (message.type === 'frame-ack') {
+    lockstepFrameAck = Math.max(lockstepFrameAck, message.serial ?? 0);
+    lockstepWorkerBacklog = lockstepWorkerBacklogDepth();
+    lockstepLocalTick = message.localTick ?? lockstepLocalTick;
+    lockstepChecksumChecks = message.checksumChecks ?? lockstepChecksumChecks;
+    lockstepHealth = lockstepChecksumChecks > 0
+      ? `SYNC OK #${lockstepChecksumChecks}`
+      : 'RUNNING';
+    return;
+  }
+
+  if (message.type === 'snapshot') {
+    lockstepLocalTick = message.localTick ?? lockstepLocalTick;
+    lockstepChecksumChecks = message.checksumChecks ?? lockstepChecksumChecks;
+    if (lockstepRenderingHealthy()) {
+      acceptSnapshot(message.snapshot, { source: 'lockstep' });
+    }
+    return;
+  }
+
+  if (message.type === 'desync') {
+    lockstepHealth = String(message.reason ?? 'DESYNC').toUpperCase();
+    stopLockstepWorker();
+    requestLockstepResync(message.reason ?? 'worker-desync');
+  }
+}
+
+function ensureLockstepWorker() {
+  if (lockstepWorker) return true;
+  if (lockstepWorkerFailed || typeof Worker === 'undefined') {
+    lockstepWorkerFailed = true;
+    lockstepResyncs = 3;
+    lockstepHealth = 'SNAPSHOT FALLBACK';
+    return false;
+  }
+  try {
+    lockstepWorker = new Worker('/public/lockstep-worker.mjs', { type: 'module' });
+    lockstepWorker.addEventListener('message', handleLockstepWorkerMessage);
+    lockstepWorker.addEventListener('error', () => {
+      stopLockstepWorker({ failed: true });
+      lockstepResyncs = 3;
+      lockstepHealth = 'SNAPSHOT FALLBACK';
+    });
+    return true;
+  } catch {
+    stopLockstepWorker({ failed: true });
+    lockstepResyncs = 3;
+    lockstepHealth = 'SNAPSHOT FALLBACK';
+    return false;
+  }
+}
+
+lockstepRenderingHealthy = function workerLockstepRenderingHealthy() {
+  return Boolean(
+    lockstepWorker
+    && lockstepWorkerReady
+    && !lockstepWorkerFailed
+    && !lockstepResyncPending
+    && lockstepResyncs < 3
+    && lockstepHealth !== 'SNAPSHOT FALLBACK'
+  );
+};
+
+installLockstepBootstrap = function workerInstallLockstepBootstrap(bootstrap) {
+  lockstepResyncPending = false;
+  if (!ensureLockstepWorker()) return;
+  lockstepWorkerReady = false;
+  lockstepFrameSerial = 0;
+  lockstepFrameAck = 0;
+  lockstepWorkerBacklog = 0;
+  lockstepLocalTick = Number.isInteger(bootstrap?.tick) ? bootstrap.tick : null;
+  lockstepHealth = 'BOOTSTRAPPING';
+  lockstepWorker.postMessage({
+    type: 'bootstrap',
+    bootstrap,
+    clientId,
+  });
+};
+
+runLockstepFrame = function workerRunLockstepFrame(frame) {
+  if (lockstepWorkerFailed || lockstepResyncPending) {
+    return { ok: false, reason: 'worker-unavailable' };
+  }
+  if (!ensureLockstepWorker()) {
+    return { ok: false, reason: 'worker-unavailable' };
+  }
+
+  const serial = ++lockstepFrameSerial;
+  lockstepWorkerBacklog = lockstepWorkerBacklogDepth();
+  if (lockstepWorkerBacklog > 24) {
+    stopLockstepWorker();
+    lockstepHealth = 'WORKER BACKLOG';
+    requestLockstepResync('worker-backlog');
+    return { ok: false, reason: 'worker-backlog' };
+  }
+
+  lockstepWorker.postMessage({ type: 'frame', serial, frame });
+  return { ok: true, queued: true, serial };
+};
+
+resetLockstepShadow = function workerResetLockstepShadow() {
+  stopLockstepWorker();
+  lockstepWorkerFailed = false;
+  shadowRoom = null;
+  lockstepHealth = 'WAITING';
+  lockstepResyncPending = false;
+  lockstepChecksumChecks = 0;
+  lockstepResyncs = 0;
+  localSnapshotSequence = 1;
+  lastServerSnapshotSequence = -1;
+};
+
 function formatTime(milliseconds) {
   const seconds = Math.max(0, Math.floor((milliseconds ?? 0) / 1000));
   return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
@@ -748,7 +894,7 @@ function renderSnapshot() {
   latencyNode.textContent = latencyMs === null ? '-' : String(latencyMs);
   networkStatus.textContent = attackMoveArmed
     ? 'ATTACK MOVE · 좌클릭으로 목표 지정'
-    : `Lockstep ${lockstepHealth} · local ${shadowRoom?.tick ?? '-'} · Snapshot #${snapshot.sequence} · server ${snapshot.serverTick}`;
+    : `Lockstep ${lockstepHealth} · local ${lockstepLocalTick ?? '-'} · q${lockstepWorkerBacklog} · Snapshot #${snapshot.sequence} · server ${snapshot.serverTick}`;
   pruneSelection();
   renderScoreboard();
   renderUpgradeState();
