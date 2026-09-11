@@ -367,16 +367,12 @@ function drawFog() {
   fogCtx.fillStyle = 'rgba(0, 0, 0, 0.92)';
   fogCtx.fillRect(0, 0, viewportWidth, viewportHeight);
   fogCtx.globalCompositeOperation = 'destination-out';
+  fogCtx.fillStyle = 'rgba(0,0,0,1)';
 
   for (const source of visionSources) {
     if (!visibleWorldPoint(source.x, source.y, source.radius)) continue;
     const x = source.x - camera.x;
     const y = source.y - camera.y;
-    const gradient = fogCtx.createRadialGradient(x, y, source.radius * 0.68, x, y, source.radius);
-    gradient.addColorStop(0, 'rgba(0,0,0,1)');
-    gradient.addColorStop(0.8, 'rgba(0,0,0,0.9)');
-    gradient.addColorStop(1, 'rgba(0,0,0,0)');
-    fogCtx.fillStyle = gradient;
     fogCtx.beginPath();
     fogCtx.arc(x, y, source.radius, 0, Math.PI * 2);
     fogCtx.fill();
@@ -600,12 +596,12 @@ function render(forceMinimap = false) {
   ctx.save();
   ctx.translate(shake.x, shake.y);
   drawTerrain();
+  drawFog();
   drawZones();
   drawClassicBeacons();
   drawUpgradeBuildings();
   drawUnits();
   drawCombatEffects();
-  drawFog();
   drawSelectionBox();
   ctx.restore();
 
