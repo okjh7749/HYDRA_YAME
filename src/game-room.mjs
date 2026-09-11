@@ -364,9 +364,10 @@ export function snapshotForClient(room, clientId) {
   );
 
   const beacons = (room.state.beaconPads ?? [])
-    .filter((pad) => fullVision || pad.team === team)
+    .filter((pad) => fullVision || pad.ownerSlot === roomPlayer.slot)
     .map((pad) => ({
       id: pad.id,
+      ownerSlot: pad.ownerSlot,
       team: pad.team,
       direction: pad.direction,
       targetZoneId: pad.targetZoneId,

@@ -34,7 +34,7 @@ import {
   upgradeOptionsForBuilding,
 } from '/src/game-upgrades.mjs';
 import {
-  beaconPadsForTeam,
+  beaconPadsForPlayer,
   initializeBeaconSystem,
   stepBeaconSystem,
 } from '/src/game-beacon.mjs';
@@ -323,7 +323,7 @@ function unitIsVisible(unit) {
 
 function drawClassicBeacons() {
   const timeMs = performance.now();
-  for (const pad of beaconPadsForTeam(simulation, LOCAL_TEAM)) {
+  for (const pad of beaconPadsForPlayer(simulation, simulation.localPlayerSlot)) {
     if (!visibleWorldPoint(pad.x, pad.y, 40)) continue;
     drawRtsBeacon(ctx, pad, {
       x: pad.x - camera.x,
@@ -431,7 +431,7 @@ function drawMinimap() {
     miniCtx.fill();
   }
 
-  for (const pad of beaconPadsForTeam(simulation, LOCAL_TEAM)) {
+  for (const pad of beaconPadsForPlayer(simulation, simulation.localPlayerSlot)) {
     miniCtx.fillStyle = '#a5edf4';
     miniCtx.fillRect(pad.x * scaleX - 1, pad.y * scaleY - 1, 2, 2);
   }
