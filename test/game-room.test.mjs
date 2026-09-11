@@ -16,6 +16,7 @@ import {
   snapshotForClient,
   startRoom,
   tickRoom,
+  visibleUnitPoolIndexesForClient,
 } from '../src/game-room.mjs';
 
 function createTwoPlayerRoom() {
@@ -194,6 +195,10 @@ test('snapshots withhold unseen enemy units until the player becomes a spectator
   assert.ok(hiddenEnemy);
 
   const playing = snapshotForClient(room, 'host');
+  const playingPoolIds = visibleUnitPoolIndexesForClient(room, 'host')
+    .map((index) => room.unitPool.id[index])
+    .sort((a, b) => a - b);
+  assert.deepEqual(playingPoolIds, playing.units.map((unit) => unit.id).sort((a, b) => a - b));
   assert.equal(playing.units.some((unit) => unit.id === hiddenEnemy.id), false);
   assert.equal(playing.beacons.length, 8);
   assert.equal(playing.beacons.every((pad) => pad.ownerSlot === playing.self.slot), true);
@@ -220,6 +225,10 @@ test('snapshots withhold unseen enemy units until the player becomes a spectator
 
   room.state.players[0].status = 'eliminated';
   const spectating = snapshotForClient(room, 'host');
+  const spectatorPoolIds = visibleUnitPoolIndexesForClient(room, 'host')
+    .map((index) => room.unitPool.id[index])
+    .sort((a, b) => a - b);
+  assert.deepEqual(spectatorPoolIds, spectating.units.map((unit) => unit.id).sort((a, b) => a - b));
   assert.equal(spectating.self.spectator, true);
   assert.equal(spectating.beacons.length, 64);
   assert.equal(spectating.buildings.length, 4);

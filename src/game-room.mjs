@@ -456,10 +456,16 @@ export function visibleUnitPoolIndexesForClient(room, clientId) {
   const fullVision = spectatorFor(room, roomPlayer);
   const visionSources = visionSourcesForClient(room, team, fullVision);
   const indexes = [];
-  for (const unit of room.state.units) {
-    if (unit.team !== team && !visibleToTeam(visionSources, unit.x, unit.y, fullVision)) continue;
-    const poolIndex = room.unitPool.indexForId(unit.id);
-    if (poolIndex >= 0) indexes.push(poolIndex);
+  const pool = room.unitPool;
+  for (let poolIndex = 0; poolIndex < pool.capacity; poolIndex += 1) {
+    if (!pool.alive[poolIndex]) continue;
+    if (pool.team[poolIndex] !== team && !visibleToTeam(
+      visionSources,
+      fromFixed(pool.x[poolIndex]),
+      fromFixed(pool.y[poolIndex]),
+      fullVision,
+    )) continue;
+    indexes.push(poolIndex);
   }
   return indexes;
 }
