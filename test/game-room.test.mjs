@@ -108,6 +108,31 @@ test('server move command ignores enemy ids and moves only the callers team', ()
   assert.equal(enemy.path.length, 0);
 });
 
+test('server attack-move keeps ownership validation and records the combat order', () => {
+  const room = createTwoPlayerRoom();
+  startAndAdvance(room);
+
+  const own = room.state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
+  const enemy = room.state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 2);
+  assert.ok(own);
+  assert.ok(enemy);
+
+  const target = room.map.zones[16];
+  const result = handleRoomCommand(room, 'host', {
+    type: 'attack-move',
+    unitIds: [own.id, enemy.id],
+    x: target.x,
+    y: target.y,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.type, 'attack-move');
+  assert.equal(result.ordered, 1);
+  assert.equal(own.orderType, 'attack-move');
+  assert.deepEqual(own.attackMoveTarget, { x: target.x, y: target.y });
+  assert.equal(enemy.orderType, undefined);
+});
+
 test('server validates and applies upgrades for the callers team', () => {
   const room = createTwoPlayerRoom();
   startAndAdvance(room);

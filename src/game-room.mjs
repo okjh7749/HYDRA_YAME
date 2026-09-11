@@ -219,7 +219,7 @@ export function handleRoomCommand(room, clientId, command) {
   }
   if (!command || typeof command !== 'object') return { ok: false, reason: 'invalid-command' };
 
-  if (command.type === 'move') {
+  if (command.type === 'move' || command.type === 'attack-move') {
     const x = Number(command.x);
     const y = Number(command.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
@@ -227,8 +227,11 @@ export function handleRoomCommand(room, clientId, command) {
     }
     const ids = commandableUnitIds(room, player.slot, command.unitIds);
     if (ids.size === 0) return { ok: false, reason: 'no-commandable-units' };
-    const ordered = assignMoveOrders(room.map, room.state, ids, { x, y });
-    return { ok: ordered > 0, type: 'move', ordered };
+    const orderType = command.type === 'attack-move' ? 'attack-move' : 'move';
+    const ordered = assignMoveOrders(
+      room.map, room.state, ids, { x, y }, { orderType },
+    );
+    return { ok: ordered > 0, type: orderType, ordered };
   }
 
   if (command.type === 'upgrade') {

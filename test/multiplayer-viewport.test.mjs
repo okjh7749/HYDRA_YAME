@@ -28,6 +28,13 @@ test('multiplayer match uses a full-screen camera viewport with in-world HUD', a
   assert.match(client, /function updateCamera\(/);
   assert.match(client, /cameraWorldWidth\(\)/);
   assert.match(client, /minimap\.addEventListener\('pointerdown'/);
+  assert.match(client, /window\.addEventListener\('pointermove'/);
+  assert.match(client, /const edge = 30;/);
+  assert.match(client, /event\.code === 'KeyA'/);
+  assert.match(client, /type: 'attack-move'/);
+  assert.match(client, /function panCameraFromMinimap\(/);
+  assert.match(client, /minimap\.addEventListener\('pointermove'/);
+  assert.match(html, /A\+CLICK: ATTACK MOVE/);
 });
 
 test('multiplayer snapshots render visible MASS ASSAULT beacon pads', async () => {
