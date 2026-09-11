@@ -142,10 +142,10 @@ export function projectLockstepSnapshot(
   room,
   clientId,
   sequence = 0,
-  { includeUnits = true } = {},
+  { includeUnits = true, projection = null } = {},
 ) {
   if (!room || !clientId) return null;
-  const projected = snapshotForClient(room, clientId, { includeUnits });
+  const projected = snapshotForClient(room, clientId, { includeUnits, projection });
   if (!projected) return null;
   return {
     ...projected,

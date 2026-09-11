@@ -449,12 +449,20 @@ function visionSourcesForClient(room, team, fullVision) {
   }));
 }
 
-export function visibleUnitPoolIndexesForClient(room, clientId) {
+export function createClientProjectionContext(room, clientId) {
   const roomPlayer = playerForClient(room, clientId);
-  if (!roomPlayer || !room.state.match) return [];
+  if (!roomPlayer || !room.state.match) return null;
   const team = roomPlayer.team;
   const fullVision = spectatorFor(room, roomPlayer);
+  const playerState = getPlayerState(room.state, roomPlayer.slot);
   const visionSources = visionSourcesForClient(room, team, fullVision);
+  return { roomPlayer, team, fullVision, playerState, visionSources };
+}
+
+export function visibleUnitPoolIndexesForClient(room, clientId, projection = null) {
+  const context = projection ?? createClientProjectionContext(room, clientId);
+  if (!context) return [];
+  const { team, fullVision, visionSources } = context;
   const indexes = [];
   const pool = room.unitPool;
   for (let poolIndex = 0; poolIndex < pool.capacity; poolIndex += 1) {
@@ -470,13 +478,10 @@ export function visibleUnitPoolIndexesForClient(room, clientId) {
   return indexes;
 }
 
-export function snapshotForClient(room, clientId, { includeUnits = true } = {}) {
-  const roomPlayer = playerForClient(room, clientId);
-  if (!roomPlayer || !room.state.match) return null;
-  const team = roomPlayer.team;
-  const fullVision = spectatorFor(room, roomPlayer);
-  const playerState = getPlayerState(room.state, roomPlayer.slot);
-  const visionSources = visionSourcesForClient(room, team, fullVision);
+export function snapshotForClient(room, clientId, { includeUnits = true, projection = null } = {}) {
+  const context = projection ?? createClientProjectionContext(room, clientId);
+  if (!context) return null;
+  const { roomPlayer, team, fullVision, playerState, visionSources } = context;
 
   const units = includeUnits
     ? room.state.units
@@ -567,7 +572,7 @@ export function snapshotForClient(room, clientId, { includeUnits = true } = {}) 
     beacons,
     buildings,
     effects,
-    visionSources: visionSourcesForClient(room, team, fullVision),
+    visionSources,
   };
 }
 

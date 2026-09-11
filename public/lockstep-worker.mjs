@@ -3,7 +3,10 @@ import {
   projectLockstepSnapshot,
   restoreLockstepRoom,
 } from '/src/lockstep-sync.mjs';
-import { visibleUnitPoolIndexesForClient } from '/src/game-room.mjs';
+import {
+  createClientProjectionContext,
+  visibleUnitPoolIndexesForClient,
+} from '/src/game-room.mjs';
 import { packRenderUnitPoolFrame } from '/src/render-unit-frame.mjs';
 
 let room = null;
@@ -13,14 +16,15 @@ let checksumChecks = 0;
 
 function postSnapshot(serial = 0) {
   if (!room || !clientId) return;
+  const projection = createClientProjectionContext(room, clientId);
   const snapshot = projectLockstepSnapshot(
     room,
     clientId,
     localSnapshotSequence++,
-    { includeUnits: false },
+    { includeUnits: false, projection },
   );
   if (!snapshot) return;
-  const visibleIndexes = visibleUnitPoolIndexesForClient(room, clientId);
+  const visibleIndexes = visibleUnitPoolIndexesForClient(room, clientId, projection);
   const unitFrame = packRenderUnitPoolFrame(room.unitPool, visibleIndexes);
   self.postMessage({
     type: 'snapshot',
