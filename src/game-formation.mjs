@@ -2,6 +2,7 @@ import { isWalkableWorld } from './game-core.mjs';
 
 export const HYDRA_SEPARATION_RADIUS = 22;
 export const HYDRA_SEPARATION_SPEED = 62;
+export const HYDRA_SEPARATION_INTERVAL_MS = 100;
 export const MAX_HYDRA_SEPARATION_PUSH = 4.25;
 export const HYDRA_FACING_TURN_RATE = Math.PI * 5;
 
@@ -125,7 +126,11 @@ function pathVelocity(unit, deltaSeconds) {
 export function stepFormationMovement(state, map, deltaMs) {
   if (state.match && state.match.phase !== 'running') return;
   const deltaSeconds = deltaMs / 1000;
-  const spatialHash = buildHydraSpatialHash(state);
+  state.separationAccumulatorMs = (state.separationAccumulatorMs
+    ?? Math.max(0, HYDRA_SEPARATION_INTERVAL_MS - deltaMs)) + deltaMs;
+  const runSeparation = state.separationAccumulatorMs >= HYDRA_SEPARATION_INTERVAL_MS;
+  if (runSeparation) state.separationAccumulatorMs %= HYDRA_SEPARATION_INTERVAL_MS;
+  const spatialHash = runSeparation ? buildHydraSpatialHash(state) : new Map();
 
   for (const unit of state.units) {
     const pathMove = pathVelocity(unit, deltaSeconds);

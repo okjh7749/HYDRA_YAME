@@ -17,6 +17,9 @@ export const HYDRA_VISION_RADIUS = 176;
 export const SUNKEN_VISION_RADIUS = 240;
 export const OVERLORD_VISION_RADIUS = 280;
 export const MAX_LOCAL_HYDRAS_PER_ZONE = 80;
+export const VISION_CLUSTER_SIZE = 160;
+export const LARGE_ORDER_UNIT_THRESHOLD = 32;
+export const PATH_GROUP_WORLD_SIZE = 64;
 
 function distanceSquared(a, b) {
   const dx = a.x - b.x;
@@ -196,9 +199,13 @@ export function assignMoveOrders(map, state, unitIds, targetWorld, { orderType =
   const centerX = selected.length ? center.x / selected.length : targetWorld.x;
   const centerY = selected.length ? center.y / selected.length : targetWorld.y;
   const heading = Math.atan2(targetWorld.y - centerY, targetWorld.x - centerX);
+  const relaxedFormation = selected.length >= LARGE_ORDER_UNIT_THRESHOLD;
+  const groupedPaths = new Map();
 
   selected.forEach((unit, index) => {
-    const baseOffset = unit.type === 'hydra' ? formationOffset(index, selected.length) : { x: 0, y: 0 };
+    const baseOffset = !relaxedFormation && unit.type === 'hydra'
+      ? formationOffset(index, selected.length)
+      : { x: 0, y: 0 };
     const offset = rotateOffset(baseOffset, heading + Math.PI / 2);
     const desiredTarget = {
       x: targetWorld.x + offset.x,
@@ -207,8 +214,18 @@ export function assignMoveOrders(map, state, unitIds, targetWorld, { orderType =
     const snappedTarget = nearestWalkablePoint(map, desiredTarget.x, desiredTarget.y, 64);
     if (!snappedTarget) return;
 
-    const path = findPath(map, { x: unit.x, y: unit.y }, snappedTarget);
-    if (path.length === 0) return;
+    let path;
+    if (relaxedFormation) {
+      const groupKey = `${Math.floor(unit.x / PATH_GROUP_WORLD_SIZE)},${Math.floor(unit.y / PATH_GROUP_WORLD_SIZE)}`;
+      path = groupedPaths.get(groupKey);
+      if (!path) {
+        path = findPath(map, { x: unit.x, y: unit.y }, snappedTarget);
+        if (path.length > 0) groupedPaths.set(groupKey, path);
+      }
+    } else {
+      path = findPath(map, { x: unit.x, y: unit.y }, snappedTarget);
+    }
+    if (!path || path.length === 0) return;
 
     unit.path = path;
     unit.pathIndex = Math.min(1, path.length);
@@ -255,6 +272,30 @@ export function nearestSelectableUnit(state, ownerSlot, point, radius = 22) {
   return best;
 }
 
+function clusterVisionSources(candidates) {
+  const buckets = new Map();
+  for (const source of candidates) {
+    const key = `${Math.floor(source.x / VISION_CLUSTER_SIZE)},${Math.floor(source.y / VISION_CLUSTER_SIZE)}`;
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(source);
+    buckets.set(key, bucket);
+  }
+
+  return [...buckets.values()].map((bucket) => {
+    const center = bucket.reduce(
+      (sum, source) => ({ x: sum.x + source.x, y: sum.y + source.y }),
+      { x: 0, y: 0 },
+    );
+    const x = center.x / bucket.length;
+    const y = center.y / bucket.length;
+    let radius = 0;
+    for (const source of bucket) {
+      radius = Math.max(radius, Math.hypot(source.x - x, source.y - y) + source.radius);
+    }
+    return { x, y, radius };
+  });
+}
+
 export function getVisionSources(state, map, team) {
   if (team === state.localTeam && state.match?.localMode === 'spectating') {
     return [{
@@ -275,10 +316,20 @@ export function getVisionSources(state, map, team) {
     sources.push({ x: zone.x, y: zone.y + 27, radius: SUNKEN_VISION_RADIUS });
   }
 
-  return sources;
+  return clusterVisionSources(sources);
+}
+
+export function isPointVisibleFromSources(sources, x, y) {
+  for (const source of sources ?? []) {
+    const dx = x - source.x;
+    const dy = y - source.y;
+    if (dx * dx + dy * dy <= source.radius * source.radius) return true;
+  }
+  return false;
 }
 
 export function isPointVisible(state, map, team, x, y) {
+  return isPointVisibleFromSources(getVisionSources(state, map, team), x, y);
   for (const unit of state.units) {
     if (unit.team !== team) continue;
     const radius = unit.visionRadius ?? HYDRA_VISION_RADIUS;

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { WebSocketPeer } from '../src/websocket-server.mjs';
+import { REALTIME_BACKPRESSURE_BYTES } from '../src/websocket-server.mjs';
 
 class FakeSocket extends EventEmitter {
   constructor() {
@@ -34,6 +35,19 @@ test('graceful peer close emits one close event so room sessions can be released
 
   assert.equal(peer.closed, true);
   assert.equal(closeEvents, 1);
+  assert.equal(socket.writes.length, 1);
+});
+
+test('realtime snapshots are dropped while the socket is backpressured', () => {
+  const socket = new FakeSocket();
+  socket.writableLength = REALTIME_BACKPRESSURE_BYTES + 1;
+  const peer = new WebSocketPeer(socket);
+
+  assert.equal(peer.canSendRealtime(), false);
+  assert.equal(peer.sendJson({ type: 'snapshot' }, { realtime: true }), false);
+  assert.equal(socket.writes.length, 0);
+  socket.writableLength = 0;
+  assert.equal(peer.sendJson({ type: 'snapshot' }, { realtime: true }), true);
   assert.equal(socket.writes.length, 1);
 });
 

@@ -60,6 +60,7 @@ let clientId = null;
 let lobby = null;
 let snapshot = null;
 let previousSnapshot = null;
+let previousUnitsById = new Map();
 let snapshotReceivedAt = performance.now();
 let moveMarker = null;
 let visualFrameTime = performance.now();
@@ -80,6 +81,8 @@ const cameraInput = {
 let viewportWidth = 1;
 let viewportHeight = 1;
 let lastFrameAt = performance.now();
+let lastBattlefieldRenderAt = 0;
+let fogCacheKey = '';
 let minimapAccumulatorMs = 0;
 let lastMatchPhase = null;
 
@@ -297,6 +300,7 @@ function resizeCanvas() {
   fogCanvas.height = Math.max(1, Math.round(viewportHeight * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   fogCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fogCacheKey = '';
   clampCamera(camera, map, cameraWorldWidth(), cameraWorldHeight());
 }
 
@@ -384,17 +388,31 @@ function visualEffects() {
 }
 
 function interpolatedUnits() {
-  if (!snapshot || !previousSnapshot) return snapshot?.units ?? [];
-  const previousById = new Map(previousSnapshot.units.map((unit) => [unit.id, unit]));
-  const alpha = Math.min(1, Math.max(0, (visualFrameTime - snapshotReceivedAt) / SNAPSHOT_INTERPOLATION_MS));
-  return snapshot.units.map((unit) => {
-    const previous = previousById.get(unit.id);
-    return {
+  if (!snapshot) return [];
+  const interpolationMs = Math.max(
+    SNAPSHOT_INTERPOLATION_MS,
+    snapshot.snapshotIntervalMs ?? 0,
+  );
+  const alpha = previousSnapshot
+    ? Math.min(1, Math.max(0, (visualFrameTime - snapshotReceivedAt) / interpolationMs))
+    : 1;
+  const elapsed = visualElapsedMs();
+  const result = [];
+  for (const unit of snapshot.units) {
+    const previous = previousUnitsById.get(unit.id);
+    const previousX = previous?.x ?? unit.x;
+    const previousY = previous?.y ?? unit.y;
+    if (
+      !pointOnScreen(unit.x, unit.y, 64)
+      && !pointOnScreen(previousX, previousY, 64)
+    ) continue;
+    result.push({
       ...interpolateUnitPose(previous, unit, alpha),
       moving: isUnitMoving(previous, unit),
-      attackFlashMs: Math.max(0, (unit.attackFlashMs ?? 0) - visualElapsedMs()),
-    };
-  });
+      attackFlashMs: Math.max(0, (unit.attackFlashMs ?? 0) - elapsed),
+    });
+  }
+  return result;
 }
 
 function drawTerrain() {
@@ -421,6 +439,11 @@ function pointVisible(x, y) {
 
 function drawFog() {
   if (!snapshot || snapshot.self.spectator) return;
+  const cacheKey = `${snapshot.sequence}:${Math.round(camera.x)}:${Math.round(camera.y)}:${Math.round(viewportWidth)}:${Math.round(viewportHeight)}`;
+  if (cacheKey === fogCacheKey) {
+    ctx.drawImage(fogCanvas, 0, 0, viewportWidth, viewportHeight);
+    return;
+  }
 
   fogCtx.save();
   fogCtx.globalCompositeOperation = 'source-over';
@@ -438,6 +461,7 @@ function drawFog() {
     fogCtx.fill();
   }
   fogCtx.restore();
+  fogCacheKey = cacheKey;
 
   ctx.drawImage(fogCanvas, 0, 0, viewportWidth, viewportHeight);
 }
@@ -685,7 +709,9 @@ function handleMessage(message) {
   if (message.type === 'snapshot') {
     if (snapshot && message.sequence < snapshot.sequence) return;
     previousSnapshot = snapshot;
+    previousUnitsById = new Map((previousSnapshot?.units ?? []).map((unit) => [unit.id, unit]));
     snapshot = message;
+    fogCacheKey = '';
     snapshotReceivedAt = performance.now();
     for (const effect of message.effects ?? []) {
       if ((effect.elapsedMs ?? 0) <= 55) playCombatImpact(effect);
@@ -711,6 +737,8 @@ function handleMessage(message) {
     lobby = null;
     snapshot = null;
     previousSnapshot = null;
+    previousUnitsById = new Map();
+    fogCacheKey = '';
     moveMarker = null;
     selectedIds.clear();
     camera.initialized = false;
@@ -971,6 +999,20 @@ function updateCamera(deltaMs) {
   clampCamera(camera, map, cameraWorldWidth(), cameraWorldHeight());
 }
 
+function battlefieldFrameBudgetMs() {
+  const visibleUnits = snapshot?.units.length ?? 0;
+  if (visibleUnits >= 240) return 1000 / 30;
+  if (visibleUnits >= 120) return 1000 / 40;
+  return 0;
+}
+
+function minimapFrameBudgetMs() {
+  const visibleUnits = snapshot?.units.length ?? 0;
+  if (visibleUnits >= 240) return 250;
+  if (visibleUnits >= 120) return 160;
+  return 100;
+}
+
 function animationFrame(now) {
   visualFrameTime = now;
   const deltaMs = Math.min(50, Math.max(0, now - lastFrameAt));
@@ -978,8 +1020,12 @@ function animationFrame(now) {
   if (!gameScreen.hidden) {
     updateCamera(deltaMs);
     minimapAccumulatorMs += deltaMs;
-    renderBattlefield();
-    if (minimapAccumulatorMs >= 100) {
+    const frameBudget = battlefieldFrameBudgetMs();
+    if (frameBudget === 0 || now - lastBattlefieldRenderAt >= frameBudget) {
+      renderBattlefield();
+      lastBattlefieldRenderAt = now;
+    }
+    if (minimapAccumulatorMs >= minimapFrameBudgetMs()) {
       drawMinimap();
       minimapAccumulatorMs = 0;
     }

@@ -19,7 +19,7 @@ import {
   assignMoveOrders,
   createSimulation,
   getVisionSources,
-  isPointVisible,
+  isPointVisibleFromSources,
   stepProduction,
 } from './game-simulation.mjs';
 import {
@@ -32,6 +32,8 @@ export const MAX_ROOM_PLAYERS = 8;
 export const MIN_ROOM_PLAYERS = 2;
 export const SERVER_TICK_MS = 50;
 export const SNAPSHOT_INTERVAL_MS = 100;
+export const BUSY_SNAPSHOT_INTERVAL_MS = 160;
+export const HEAVY_SNAPSHOT_INTERVAL_MS = 250;
 export const SLOT_JOIN_ORDER = Object.freeze([0, 2, 4, 6, 1, 3, 5, 7]);
 
 function sanitizeName(name) {
@@ -274,9 +276,17 @@ export function tickRoom(room, deltaMs = SERVER_TICK_MS) {
   return events;
 }
 
+export function snapshotIntervalForRoom(room) {
+  const unitCount = room.state.units.length;
+  if (unitCount >= 240) return HEAVY_SNAPSHOT_INTERVAL_MS;
+  if (unitCount >= 120) return BUSY_SNAPSHOT_INTERVAL_MS;
+  return SNAPSHOT_INTERVAL_MS;
+}
+
 export function roomNeedsSnapshot(room) {
-  if (room.snapshotAccumulatorMs < SNAPSHOT_INTERVAL_MS) return false;
-  room.snapshotAccumulatorMs %= SNAPSHOT_INTERVAL_MS;
+  const intervalMs = snapshotIntervalForRoom(room);
+  if (room.snapshotAccumulatorMs < intervalMs) return false;
+  room.snapshotAccumulatorMs %= intervalMs;
   room.snapshotSequence += 1;
   return true;
 }
@@ -316,8 +326,8 @@ function spectatorFor(room, roomPlayer) {
   return playerState?.status === 'eliminated' || room.state.match?.phase === 'finished';
 }
 
-function visibleToTeam(room, team, x, y, fullVision) {
-  return fullVision || isPointVisible(room.state, room.map, team, x, y);
+function visibleToTeam(visionSources, x, y, fullVision) {
+  return fullVision || isPointVisibleFromSources(visionSources, x, y);
 }
 
 function teamRowsForClient(room, team, fullVision) {
@@ -356,15 +366,16 @@ export function snapshotForClient(room, clientId) {
   const team = roomPlayer.team;
   const fullVision = spectatorFor(room, roomPlayer);
   const playerState = getPlayerState(room.state, roomPlayer.slot);
+  const visionSources = visionSourcesForClient(room, team, fullVision);
 
   const units = room.state.units
     .filter(
-      (unit) => unit.team === team || visibleToTeam(room, team, unit.x, unit.y, fullVision),
+      (unit) => unit.team === team || visibleToTeam(visionSources, unit.x, unit.y, fullVision),
     )
     .map(serializeUnit);
 
   const zones = room.map.zones.map((zone) => {
-    const visible = zone.ownerTeam === team || visibleToTeam(room, team, zone.x, zone.y, fullVision);
+    const visible = zone.ownerTeam === team || visibleToTeam(visionSources, zone.x, zone.y, fullVision);
     return {
       id: zone.id,
       x: zone.x,
@@ -380,7 +391,7 @@ export function snapshotForClient(room, clientId) {
   });
 
   const effects = (room.state.effects ?? []).filter(
-    (effect) => visibleToTeam(room, team, effect.x2, effect.y2, fullVision),
+    (effect) => visibleToTeam(visionSources, effect.x2, effect.y2, fullVision),
   );
 
   const beacons = (room.state.beaconPads ?? [])
@@ -402,7 +413,7 @@ export function snapshotForClient(room, clientId) {
         && (
           fullVision
           || building.team === team
-          || visibleToTeam(room, team, building.x, building.y, false)
+          || visibleToTeam(visionSources, building.x, building.y, false)
         ),
     )
     .map(serializeUpgradeBuilding);
@@ -412,6 +423,7 @@ export function snapshotForClient(room, clientId) {
     roomId: room.id,
     sequence: room.snapshotSequence,
     serverTick: room.tick,
+    snapshotIntervalMs: snapshotIntervalForRoom(room),
     self: {
       id: roomPlayer.id,
       slot: roomPlayer.slot,

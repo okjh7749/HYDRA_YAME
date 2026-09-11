@@ -63,8 +63,9 @@ export function createMultiplayerHub({ tickMs = SERVER_TICK_MS } = {}) {
 
   function sendSnapshots(room) {
     for (const session of connectedSessionsForRoom(room.id)) {
+      if (session.peer.canSendRealtime && !session.peer.canSendRealtime()) continue;
       const snapshot = snapshotForClient(room, session.clientId);
-      if (snapshot) session.peer.sendJson(snapshot);
+      if (snapshot) session.peer.sendJson(snapshot, { realtime: true });
     }
   }
 

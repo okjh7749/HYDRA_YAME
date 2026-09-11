@@ -14,6 +14,7 @@ import {
   DEATH_VISUAL_WINDOW_MS,
   PROJECTILE_VISUAL_DURATION_MS,
 } from './rts-animation.mjs';
+import { SpatialGrid } from './spatial-grid.mjs';
 
 export const HYDRA_BASE_DAMAGE = 5;
 export const HYDRA_ATTACK_RANGE = 96;
@@ -30,6 +31,7 @@ export const SUNKEN_KILL_REWARD = 150;
 export const CAPTURE_COST = 250;
 export const CAPTURE_RADIUS = 64;
 export const OVERLORD_ARMOR = 250;
+const COMBAT_CELL_SIZE = 192;
 
 const OVERLORD_SPAWNS = Object.freeze([
   Object.freeze({ x: 400, y: 1648 }), Object.freeze({ x: 400, y: 1648 }),
@@ -224,11 +226,12 @@ function damageUnit(state, target, amount, attackerOwnerSlot, source) {
   return true;
 }
 
-function nearestEnemyUnit(state, attacker, range) {
+function nearestEnemyUnit(state, attacker, range, unitGrid = null) {
   const rangeSquared = range * range;
   let best = null;
   let bestDistance = Number.POSITIVE_INFINITY;
-  for (const target of state.units) {
+  const candidates = unitGrid?.query(attacker.x, attacker.y, range) ?? state.units;
+  for (const target of candidates) {
     if (target.hp <= 0 || target.team === attacker.team || target.id === attacker.id) continue;
     if (target.combatTargetable === false) continue;
     const distance = distanceSquared(attacker, target);
@@ -240,11 +243,12 @@ function nearestEnemyUnit(state, attacker, range) {
   return best;
 }
 
-function nearestEnemySunken(map, attacker, range) {
+function nearestEnemySunken(map, attacker, range, sunkenGrid = null) {
   const rangeSquared = range * range;
   let best = null;
   let bestDistance = Number.POSITIVE_INFINITY;
-  for (const zone of map.zones) {
+  const candidates = sunkenGrid?.query(attacker.x, attacker.y, range) ?? map.zones;
+  for (const zone of candidates) {
     if (zone.ownerTeam === null || zone.ownerTeam === attacker.team || zone.sunkenHp <= 0) continue;
     const distance = distanceSquared(attacker, zone);
     if (distance <= rangeSquared && distance < bestDistance) {
@@ -298,6 +302,13 @@ export function stepCombat(state, map, deltaMs) {
   initializeCombatState(state, map);
   if (state.match && state.match.phase !== 'running') return;
   stepEffects(state, deltaMs);
+  const unitGrid = new SpatialGrid(COMBAT_CELL_SIZE).build(
+    state.units,
+    (unit) => unit.hp > 0 && unit.combatTargetable !== false,
+  );
+  const sunkenGrid = new SpatialGrid(COMBAT_CELL_SIZE).build(
+    map.zones, (zone) => zone.ownerTeam !== null && zone.sunkenHp > 0,
+  );
 
   for (const unit of state.units) {
     if (unit.hp <= 0) continue;
@@ -307,7 +318,7 @@ export function stepCombat(state, map, deltaMs) {
 
     const attackerOwnerSlot = unitOwnerSlot(unit);
     const range = hydraAttackRange(state, attackerOwnerSlot);
-    const enemyUnit = nearestEnemyUnit(state, unit, range);
+    const enemyUnit = nearestEnemyUnit(state, unit, range, unitGrid);
     if (enemyUnit) {
       const targetOwnerSlot = unitOwnerSlot(enemyUnit);
       const armor = enemyUnit.type === 'hydra'
@@ -322,7 +333,7 @@ export function stepCombat(state, map, deltaMs) {
       continue;
     }
 
-    const enemySunken = nearestEnemySunken(map, unit, range);
+    const enemySunken = nearestEnemySunken(map, unit, range, sunkenGrid);
     if (!enemySunken) {
       unit.currentTarget = null;
       continue;
@@ -353,7 +364,7 @@ export function stepCombat(state, map, deltaMs) {
     zone.sunkenAttackFlashMs = Math.max(0, (zone.sunkenAttackFlashMs ?? 0) - deltaMs);
     if (zone.sunkenAttackCooldownMs > 0) continue;
     const attacker = { x: zone.x, y: zone.y, ownerSlot, team: teamForSlot(ownerSlot) };
-    const target = nearestEnemyUnit(state, attacker, SUNKEN_ATTACK_RANGE);
+    const target = nearestEnemyUnit(state, attacker, SUNKEN_ATTACK_RANGE, unitGrid);
     if (!target) continue;
     const targetOwnerSlot = unitOwnerSlot(target);
     const armor = target.type === 'hydra' ? hydraDefense(state, targetOwnerSlot) : (target.armor ?? 0);
