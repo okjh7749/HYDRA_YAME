@@ -4,6 +4,7 @@ import {
   projectLockstepSnapshot,
   restoreLockstepRoom,
 } from '/src/lockstep-sync.mjs';
+import { unpackRenderUnitFrame } from '/src/render-unit-frame.mjs';
 import {
   RTS_CAMERA_ZOOM,
   SNAPSHOT_INTERPOLATION_MS,
@@ -218,6 +219,8 @@ let lockstepLocalTick = null;
 let lockstepFrameSerial = 0;
 let lockstepFrameAck = 0;
 let lockstepWorkerBacklog = 0;
+const lockstepRenderUnitCaches = [new Map(), new Map()];
+let lockstepRenderUnitCacheIndex = 0;
 
 function lockstepWorkerBacklogDepth() {
   return Math.max(0, lockstepFrameSerial - lockstepFrameAck);
@@ -232,6 +235,18 @@ function stopLockstepWorker({ failed = false } = {}) {
   lockstepFrameSerial = 0;
   lockstepFrameAck = 0;
   lockstepWorkerBacklog = 0;
+}
+
+function inflateLockstepWorkerSnapshot(message) {
+  const nextSnapshot = message.snapshot;
+  if (!nextSnapshot) return null;
+  if (!message.unitFrame?.buffer) return nextSnapshot;
+  lockstepRenderUnitCacheIndex ^= 1;
+  nextSnapshot.units = unpackRenderUnitFrame(
+    message.unitFrame,
+    lockstepRenderUnitCaches[lockstepRenderUnitCacheIndex],
+  );
+  return nextSnapshot;
 }
 
 function handleLockstepWorkerMessage(event) {
@@ -257,10 +272,13 @@ function handleLockstepWorkerMessage(event) {
   }
 
   if (message.type === 'snapshot') {
+    lockstepFrameAck = Math.max(lockstepFrameAck, message.serial ?? 0);
+    lockstepWorkerBacklog = lockstepWorkerBacklogDepth();
     lockstepLocalTick = message.localTick ?? lockstepLocalTick;
     lockstepChecksumChecks = message.checksumChecks ?? lockstepChecksumChecks;
-    if (lockstepRenderingHealthy()) {
-      acceptSnapshot(message.snapshot, { source: 'lockstep' });
+    const nextSnapshot = inflateLockstepWorkerSnapshot(message);
+    if (nextSnapshot && lockstepRenderingHealthy()) {
+      acceptSnapshot(nextSnapshot, { source: 'lockstep' });
     }
     return;
   }
@@ -348,6 +366,9 @@ runLockstepFrame = function workerRunLockstepFrame(frame) {
 resetLockstepShadow = function workerResetLockstepShadow() {
   stopLockstepWorker();
   lockstepWorkerFailed = false;
+  lockstepRenderUnitCaches[0].clear();
+  lockstepRenderUnitCaches[1].clear();
+  lockstepRenderUnitCacheIndex = 0;
   shadowRoom = null;
   lockstepHealth = 'WAITING';
   lockstepResyncPending = false;
