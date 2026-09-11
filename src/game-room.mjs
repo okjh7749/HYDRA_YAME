@@ -449,7 +449,22 @@ function visionSourcesForClient(room, team, fullVision) {
   }));
 }
 
-export function snapshotForClient(room, clientId) {
+export function visibleUnitPoolIndexesForClient(room, clientId) {
+  const roomPlayer = playerForClient(room, clientId);
+  if (!roomPlayer || !room.state.match) return [];
+  const team = roomPlayer.team;
+  const fullVision = spectatorFor(room, roomPlayer);
+  const visionSources = visionSourcesForClient(room, team, fullVision);
+  const indexes = [];
+  for (const unit of room.state.units) {
+    if (unit.team !== team && !visibleToTeam(visionSources, unit.x, unit.y, fullVision)) continue;
+    const poolIndex = room.unitPool.indexForId(unit.id);
+    if (poolIndex >= 0) indexes.push(poolIndex);
+  }
+  return indexes;
+}
+
+export function snapshotForClient(room, clientId, { includeUnits = true } = {}) {
   const roomPlayer = playerForClient(room, clientId);
   if (!roomPlayer || !room.state.match) return null;
   const team = roomPlayer.team;
@@ -457,11 +472,13 @@ export function snapshotForClient(room, clientId) {
   const playerState = getPlayerState(room.state, roomPlayer.slot);
   const visionSources = visionSourcesForClient(room, team, fullVision);
 
-  const units = room.state.units
-    .filter(
-      (unit) => unit.team === team || visibleToTeam(visionSources, unit.x, unit.y, fullVision),
-    )
-    .map(serializeUnit);
+  const units = includeUnits
+    ? room.state.units
+      .filter(
+        (unit) => unit.team === team || visibleToTeam(visionSources, unit.x, unit.y, fullVision),
+      )
+      .map(serializeUnit)
+    : null;
 
   const zones = room.map.zones.map((zone) => {
     const visible = zone.ownerTeam === team || visibleToTeam(visionSources, zone.x, zone.y, fullVision);
