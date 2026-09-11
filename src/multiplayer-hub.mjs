@@ -69,6 +69,17 @@ export function createMultiplayerHub({ tickMs = SERVER_TICK_MS } = {}) {
     }
   }
 
+  function sendLockstepCommand(room, command) {
+    if (!command) return;
+    for (const session of connectedSessionsForRoom(room.id)) {
+      session.peer.sendJson({
+        type: 'lockstep-command',
+        roomId: room.id,
+        command,
+      });
+    }
+  }
+
   function detachFromRoom(session) {
     const room = roomFor(session);
     if (!room) {
@@ -170,6 +181,7 @@ export function createMultiplayerHub({ tickMs = SERVER_TICK_MS } = {}) {
 
     if (message.type === 'command') {
       const result = handleRoomCommand(room, session.clientId, message.command);
+      if (result.lockstepCommand) sendLockstepCommand(room, result.lockstepCommand);
       peer.sendJson({
         type: 'command-result',
         requestId,

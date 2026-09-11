@@ -1,4 +1,7 @@
 import { initializeBeaconSystem, stepBeaconSystem } from './game-beacon.mjs';
+import { computeDeterministicStateChecksum } from './deterministic-state.mjs';
+import { quantizeSimulationState } from './deterministic-state.mjs';
+import { fromFixed } from './fixed-point.mjs';
 import {
   ensureLocalOverlord,
   getPlayerState,
@@ -16,6 +19,10 @@ import {
   stepMatchClock,
 } from './game-match.mjs';
 import {
+  LockstepCommandQueue,
+  lockstepCommandToWire,
+} from './lockstep-command-queue.mjs';
+import {
   assignMoveOrders,
   createSimulation,
   getVisionSources,
@@ -27,6 +34,7 @@ import {
   purchaseUpgrade,
 } from './game-upgrades.mjs';
 import { setZoneOwner, unitOwnerSlot, zoneOwnerSlot } from './game-ownership.mjs';
+import { UnitPool } from './unit-pool.mjs';
 
 export const MAX_ROOM_PLAYERS = 8;
 export const MIN_ROOM_PLAYERS = 2;
@@ -34,6 +42,7 @@ export const SERVER_TICK_MS = 50;
 export const SNAPSHOT_INTERVAL_MS = 100;
 export const BUSY_SNAPSHOT_INTERVAL_MS = 160;
 export const HEAVY_SNAPSHOT_INTERVAL_MS = 250;
+export const LOCKSTEP_CHECKSUM_INTERVAL_TICKS = 20;
 export const SLOT_JOIN_ORDER = Object.freeze([0, 2, 4, 6, 1, 3, 5, 7]);
 
 function sanitizeName(name) {
@@ -70,6 +79,10 @@ function initializeRoomSimulation() {
 export function createRoom({ id, hostId, hostName }) {
   const { map, state } = initializeRoomSimulation();
   const hostSlot = SLOT_JOIN_ORDER[0];
+  const unitPool = new UnitPool();
+  unitPool.syncFromUnits(state.units);
+  const lockstepQueue = new LockstepCommandQueue();
+  const stateChecksum = computeDeterministicStateChecksum(state, map, unitPool);
   return {
     id: String(id).toUpperCase(),
     hostId,
@@ -88,6 +101,10 @@ export function createRoom({ id, hostId, hostName }) {
     tick: 0,
     snapshotAccumulatorMs: 0,
     snapshotSequence: 0,
+    unitPool,
+    lockstepQueue,
+    stateChecksum,
+    stateChecksumTick: 0,
   };
 }
 
@@ -190,6 +207,9 @@ export function startRoom(room, clientId) {
   disableUnusedPlayers(room);
   initializeMatchState(room.state, room.map, { countdownMs: 3000 });
   room.status = 'running';
+  room.unitPool.syncFromUnits(room.state.units);
+  room.stateChecksum = computeDeterministicStateChecksum(room.state, room.map, room.unitPool);
+  room.stateChecksumTick = room.tick;
   return { ok: true, teams: [...teams].sort() };
 }
 
@@ -203,11 +223,50 @@ function commandableUnitIds(room, ownerSlot, unitIds) {
       ? unitIds.filter((id) => Number.isInteger(id)).slice(0, 512)
       : [],
   );
-  return new Set(
-    room.state.units
-      .filter((unit) => requested.has(unit.id) && unitOwnerSlot(unit) === ownerSlot && unit.hp > 0)
-      .map((unit) => unit.id),
-  );
+  const allowed = new Set();
+  for (const id of requested) {
+    const index = room.unitPool.indexForId(id);
+    if (index < 0) continue;
+    if (room.unitPool.ownerSlot[index] !== ownerSlot) continue;
+    if (room.unitPool.hp[index] <= 0) continue;
+    allowed.add(id);
+  }
+  return allowed;
+}
+
+function executeLockstepCommand(room, command) {
+  if (command.type === 'move' || command.type === 'attack-move') {
+    const ids = new Set(command.unitIds ?? []);
+    const ordered = assignMoveOrders(
+      room.map,
+      room.state,
+      ids,
+      { x: fromFixed(command.xFixed), y: fromFixed(command.yFixed) },
+      { orderType: command.type },
+    );
+    return { ok: ordered > 0, type: command.type, ordered };
+  }
+
+  if (command.type === 'upgrade') {
+    const result = purchaseUpgrade(
+      room.state,
+      command.playerSlot,
+      command.buildingId,
+      command.upgradeKey,
+    );
+    return { ...result, type: 'upgrade' };
+  }
+
+  return { ok: false, reason: 'unknown-command' };
+}
+
+function executeScheduledLockstepCommands(room) {
+  const commands = room.lockstepQueue?.drain(room.tick) ?? [];
+  room.lastLockstepExecutions = commands.map((command) => ({
+    command: lockstepCommandToWire(command),
+    result: executeLockstepCommand(room, command),
+  }));
+  return room.lastLockstepExecutions;
 }
 
 export function handleRoomCommand(room, clientId, command) {
@@ -230,10 +289,21 @@ export function handleRoomCommand(room, clientId, command) {
     const ids = commandableUnitIds(room, player.slot, command.unitIds);
     if (ids.size === 0) return { ok: false, reason: 'no-commandable-units' };
     const orderType = command.type === 'attack-move' ? 'attack-move' : 'move';
-    const ordered = assignMoveOrders(
-      room.map, room.state, ids, { x, y }, { orderType },
-    );
-    return { ok: ordered > 0, type: orderType, ordered };
+    const scheduled = room.lockstepQueue.schedule(room.tick, player.slot, {
+      type: orderType,
+      unitIds: [...ids],
+      x,
+      y,
+    });
+    if (!scheduled) return { ok: false, reason: 'invalid-command' };
+    return {
+      ok: true,
+      type: orderType,
+      queued: true,
+      ordered: ids.size,
+      tick: scheduled.tick,
+      lockstepCommand: lockstepCommandToWire(scheduled),
+    };
   }
 
   if (command.type === 'upgrade') {
@@ -268,10 +338,17 @@ function tickRunningSimulation(room, deltaMs) {
 
 export function tickRoom(room, deltaMs = SERVER_TICK_MS) {
   if (room.status !== 'running') return [];
+  executeScheduledLockstepCommands(room);
   const events = stepMatchClock(room.state, room.map, deltaMs);
   if (room.state.match.phase === 'running') tickRunningSimulation(room, deltaMs);
   if (room.state.match.phase === 'finished') room.status = 'finished';
+  quantizeSimulationState(room.state);
+  room.unitPool.syncFromUnits(room.state.units);
   room.tick += 1;
+  if (room.tick % LOCKSTEP_CHECKSUM_INTERVAL_TICKS === 0) {
+    room.stateChecksum = computeDeterministicStateChecksum(room.state, room.map, room.unitPool);
+    room.stateChecksumTick = room.tick;
+  }
   room.snapshotAccumulatorMs += deltaMs;
   return events;
 }
@@ -424,6 +501,12 @@ export function snapshotForClient(room, clientId) {
     sequence: room.snapshotSequence,
     serverTick: room.tick,
     snapshotIntervalMs: snapshotIntervalForRoom(room),
+    lockstep: {
+      inputDelayTicks: room.lockstepQueue.inputDelayTicks,
+      checksum: room.stateChecksum >>> 0,
+      checksumTick: room.stateChecksumTick,
+      poolCount: room.unitPool.count,
+    },
     self: {
       id: roomPlayer.id,
       slot: roomPlayer.slot,

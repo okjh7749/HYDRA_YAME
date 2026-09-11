@@ -120,7 +120,10 @@ test('server move command ignores enemy ids and moves only the callers team', ()
   });
 
   assert.equal(result.ok, true);
+  assert.equal(result.queued, true);
   assert.equal(result.ordered, 1);
+  assert.equal(own.path.length, 0);
+  for (let tick = 0; tick < 3; tick += 1) tickRoom(room, 50);
   assert.equal(own.path.length > 0, true);
   assert.equal(enemy.path.length, 0);
 });
@@ -144,7 +147,10 @@ test('server attack-move keeps ownership validation and records the combat order
 
   assert.equal(result.ok, true);
   assert.equal(result.type, 'attack-move');
+  assert.equal(result.queued, true);
   assert.equal(result.ordered, 1);
+  assert.equal(own.orderType, undefined);
+  for (let tick = 0; tick < 3; tick += 1) tickRoom(room, 50);
   assert.equal(own.orderType, 'attack-move');
   assert.deepEqual(own.attackMoveTarget, { x: target.x, y: target.y });
   assert.equal(enemy.orderType, undefined);
@@ -201,6 +207,10 @@ test('snapshots withhold unseen enemy units until the player becomes a spectator
   );
   assert.equal(playing.buildings.length, 2);
   assert.equal(playing.buildings.every((building) => building.ownerSlot === playing.self.slot), true);
+  assert.equal(playing.lockstep.inputDelayTicks, 2);
+  assert.equal(typeof playing.lockstep.checksum, 'number');
+  assert.equal(playing.lockstep.poolCount, room.unitPool.count);
+  assert.equal(playing.lockstep.checksumTick, room.stateChecksumTick);
   assert.equal(playing.teams.find((team) => team.team === 1).minerals, '?');
   assert.equal(playing.teams.find((team) => team.team === 1).hydras, '?');
 
@@ -285,7 +295,10 @@ test('server ownership validation does not let allied players co-control units',
   });
 
   assert.equal(result.ok, true);
+  assert.equal(result.queued, true);
   assert.equal(result.ordered, 1);
+  assert.equal(own.path.length, 0);
+  for (let tick = 0; tick < 3; tick += 1) tickRoom(room, 50);
   assert.equal(own.path.length > 0, true);
   assert.equal(ally.path.length, 0);
 });
