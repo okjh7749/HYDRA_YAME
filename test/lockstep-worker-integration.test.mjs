@@ -25,7 +25,9 @@ test('multiplayer lockstep simulation runs in a module worker with backlog fallb
   assert.match(client, /unpackRenderUnitFrame/);
   assert.match(client, /lockstepRenderUnitCaches/);
   assert.match(client, /lockstepFrameAck = Math\.max\(lockstepFrameAck, message\.serial \?\? 0\)/);
-  assert.match(worker, /packRenderUnitFrame/);
+  assert.match(worker, /packRenderUnitPoolFrame/);
+  assert.match(worker, /visibleUnitPoolIndexesForClient/);
+  assert.match(worker, /includeUnits: false/);
   assert.match(worker, /\[unitFrame\.buffer\]/);
-  assert.match(worker, /snapshot\.units = null/);
+  assert.doesNotMatch(worker, /snapshot\.units = null/);
 });
