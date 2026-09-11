@@ -45,6 +45,8 @@ const battlefield = document.querySelector('#battlefield');
 const ctx = battlefield.getContext('2d');
 const minimap = document.querySelector('#minimap');
 const miniCtx = minimap.getContext('2d');
+const fogCanvas = document.createElement('canvas');
+const fogCtx = fogCanvas.getContext('2d');
 const scoreboard = document.querySelector('#scoreboard');
 const selectionInfo = document.querySelector('#selectionInfo');
 const upgradeState = document.querySelector('#upgradeState');
@@ -289,7 +291,10 @@ function resizeCanvas() {
   viewportHeight = rect.height;
   battlefield.width = Math.round(viewportWidth * dpr);
   battlefield.height = Math.round(viewportHeight * dpr);
+  fogCanvas.width = Math.max(1, Math.round(viewportWidth * dpr));
+  fogCanvas.height = Math.max(1, Math.round(viewportHeight * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fogCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   clampCamera(camera, map, cameraWorldWidth(), cameraWorldHeight());
 }
 
@@ -371,6 +376,39 @@ function drawTerrain() {
     CAMERA_ZOOM,
     isWalkableTile,
   );
+}
+
+function pointVisible(x, y) {
+  if (snapshot?.self.spectator) return true;
+  for (const source of snapshot?.visionSources ?? []) {
+    const dx = x - source.x;
+    const dy = y - source.y;
+    if (dx * dx + dy * dy <= source.radius * source.radius) return true;
+  }
+  return false;
+}
+
+function drawFog() {
+  if (!snapshot || snapshot.self.spectator) return;
+
+  fogCtx.save();
+  fogCtx.globalCompositeOperation = 'source-over';
+  fogCtx.clearRect(0, 0, viewportWidth, viewportHeight);
+  fogCtx.fillStyle = 'rgba(0, 0, 0, 0.92)';
+  fogCtx.fillRect(0, 0, viewportWidth, viewportHeight);
+  fogCtx.globalCompositeOperation = 'destination-out';
+  fogCtx.fillStyle = '#000';
+
+  for (const source of snapshot.visionSources ?? []) {
+    if (!pointOnScreen(source.x, source.y, source.radius)) continue;
+    const p = worldToCanvas(source.x, source.y);
+    fogCtx.beginPath();
+    fogCtx.arc(p.x, p.y, source.radius * CAMERA_ZOOM, 0, Math.PI * 2);
+    fogCtx.fill();
+  }
+  fogCtx.restore();
+
+  ctx.drawImage(fogCanvas, 0, 0, viewportWidth, viewportHeight);
 }
 
 function drawZones() {
@@ -496,6 +534,7 @@ function renderBattlefield() {
   ctx.save();
   ctx.translate(shake.x, shake.y);
   drawTerrain();
+  drawFog();
   drawZones();
   drawBeacons();
   drawUpgradeBuildings();
@@ -782,7 +821,9 @@ function drawMinimap() {
   for (let y = 0; y < map.rows; y += 1) {
     for (let x = 0; x < map.columns; x += 1) {
       if (!isWalkableTile(map, x, y)) continue;
-      miniCtx.fillStyle = '#314047';
+      const worldX = (x + 0.5) * map.tileSize;
+      const worldY = (y + 0.5) * map.tileSize;
+      miniCtx.fillStyle = pointVisible(worldX, worldY) ? '#314047' : '#0d1417';
       miniCtx.fillRect(
         x * map.tileSize * scaleX,
         y * map.tileSize * scaleY,
@@ -857,6 +898,11 @@ function drawMinimap() {
     cameraWorldWidth() * scaleX,
     cameraWorldHeight() * scaleY,
   );
+
+  const cameraCenterX = (camera.x + cameraWorldWidth() / 2) * scaleX;
+  const cameraCenterY = (camera.y + cameraWorldHeight() / 2) * scaleY;
+  miniCtx.fillStyle = '#ffffff';
+  miniCtx.fillRect(cameraCenterX - 1, cameraCenterY - 1, 2, 2);
 }
 
 function updateCamera(deltaMs) {
