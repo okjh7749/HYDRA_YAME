@@ -15,6 +15,7 @@ import {
   stepProduction,
   teamHydraCount,
 } from '/src/game-simulation.mjs';
+import { drawVisionFog, resizeFogSurface } from '/public/vision-render.mjs';
 
 const LOCAL_TEAM = 0;
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
@@ -28,6 +29,8 @@ const selectionCountNode = document.querySelector('#selectionCount');
 
 const ctx = gameCanvas.getContext('2d');
 const miniCtx = minimap.getContext('2d');
+const fogCanvas = document.createElement('canvas');
+const fogCtx = fogCanvas.getContext('2d');
 const map = buildClassicMap();
 const simulation = createSimulation(map, { localTeam: LOCAL_TEAM });
 
@@ -63,6 +66,7 @@ function resizeCanvas() {
   gameCanvas.width = Math.round(rect.width * dpr);
   gameCanvas.height = Math.round(rect.height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  resizeFogSurface(fogCanvas, fogCtx, viewportWidth, viewportHeight, dpr);
   clampCamera(camera, map, viewportWidth, viewportHeight);
 }
 
@@ -284,28 +288,16 @@ function drawUnits() {
 }
 
 function drawFog() {
-  const sources = getVisionSources(simulation, map, LOCAL_TEAM);
-
-  ctx.save();
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.92)';
-  ctx.fillRect(0, 0, viewportWidth, viewportHeight);
-  ctx.globalCompositeOperation = 'destination-out';
-
-  for (const source of sources) {
-    if (!visibleWorldPoint(source.x, source.y, source.radius)) continue;
-    const x = source.x - camera.x;
-    const y = source.y - camera.y;
-    const gradient = ctx.createRadialGradient(x, y, source.radius * 0.68, x, y, source.radius);
-    gradient.addColorStop(0, 'rgba(0,0,0,1)');
-    gradient.addColorStop(0.8, 'rgba(0,0,0,0.9)');
-    gradient.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(x, y, source.radius, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.restore();
+  drawVisionFog({
+    ctx,
+    fogCtx,
+    fogCanvas,
+    sources: visionSources,
+    camera,
+    viewportWidth,
+    viewportHeight,
+    visibleWorldPoint,
+  });
 }
 
 function drawSelectionBox() {

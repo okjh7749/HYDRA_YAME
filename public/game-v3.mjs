@@ -41,6 +41,7 @@ import {
 } from '/src/game-beacon.mjs';
 import { stepFormationMovement } from '/src/game-formation.mjs';
 import { drawBeaconPads, drawZealot } from '/public/beacon-render.mjs';
+import { drawVisionFog, resizeFogSurface } from '/public/vision-render.mjs';
 
 const LOCAL_TEAM = 0;
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
@@ -63,6 +64,8 @@ const balanceNoteNode = document.querySelector('#balanceNote');
 
 const ctx = gameCanvas.getContext('2d');
 const miniCtx = minimap.getContext('2d');
+const fogCanvas = document.createElement('canvas');
+const fogCtx = fogCanvas.getContext('2d');
 const map = buildClassicMap();
 const simulation = createSimulation(map, { localTeam: LOCAL_TEAM });
 initializeCombatState(simulation, map);
@@ -106,6 +109,7 @@ function resizeCanvas() {
   gameCanvas.width = Math.round(rect.width * dpr);
   gameCanvas.height = Math.round(rect.height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  resizeFogSurface(fogCanvas, fogCtx, viewportWidth, viewportHeight, dpr);
   clampCamera(camera, map, viewportWidth, viewportHeight);
 }
 
@@ -419,25 +423,16 @@ function drawCombatEffects() {
 }
 
 function drawFog() {
-  ctx.save();
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.92)';
-  ctx.fillRect(0, 0, viewportWidth, viewportHeight);
-  ctx.globalCompositeOperation = 'destination-out';
-
-  for (const source of visionSources) {
-    if (!visibleWorldPoint(source.x, source.y, source.radius)) continue;
-    const x = source.x - camera.x;
-    const y = source.y - camera.y;
-    const gradient = ctx.createRadialGradient(x, y, source.radius * 0.68, x, y, source.radius);
-    gradient.addColorStop(0, 'rgba(0,0,0,1)');
-    gradient.addColorStop(0.8, 'rgba(0,0,0,0.9)');
-    gradient.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(x, y, source.radius, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
+  drawVisionFog({
+    ctx,
+    fogCtx,
+    fogCanvas,
+    sources: visionSources,
+    camera,
+    viewportWidth,
+    viewportHeight,
+    visibleWorldPoint,
+  });
 }
 
 function drawSelectionBox() {
@@ -486,19 +481,43 @@ function drawMinimap() {
     miniCtx.fill();
   }
 
+  for (const building of simulation.upgradeBuildings ?? []) {
+    if (building.hp <= 0) continue;
+    if (!(building.team === LOCAL_TEAM || pointVisible(building.x, building.y))) continue;
+    miniCtx.fillStyle = building.team === LOCAL_TEAM
+      ? '#d9ff8d'
+      : (teamColors[building.team] ?? '#d9ff8d');
+    miniCtx.fillRect(
+      building.x * scaleX - 2.5,
+      building.y * scaleY - 2.5,
+      5,
+      5,
+    );
+  }
+
+  const beaconCenter = simulation.beaconCenters?.get(LOCAL_TEAM);
+  if (beaconCenter) {
+    const x = beaconCenter.x * scaleX;
+    const y = beaconCenter.y * scaleY;
+    miniCtx.fillStyle = '#bce9ff';
+    miniCtx.beginPath();
+    miniCtx.moveTo(x, y - 4);
+    miniCtx.lineTo(x + 4, y);
+    miniCtx.lineTo(x, y + 4);
+    miniCtx.lineTo(x - 4, y);
+    miniCtx.closePath();
+    miniCtx.fill();
+  }
   for (const unit of simulation.units) {
     if (!unitIsVisible(unit)) continue;
     miniCtx.fillStyle = unit.type === 'overlord'
       ? '#e68ad0'
       : (unit.type === 'zealot' ? '#fff0a6' : teamColors[unit.team]);
     miniCtx.beginPath();
-    miniCtx.arc(
-      unit.x * scaleX,
-      unit.y * scaleY,
-      unit.type === 'overlord' ? 3 : 1.2,
-      0,
-      Math.PI * 2,
-    );
+    const radius = unit.type === 'overlord'
+      ? 3.5
+      : (unit.type === 'zealot' ? 2.8 : (unit.team === LOCAL_TEAM ? 2 : 1.4));
+    miniCtx.arc(unit.x * scaleX, unit.y * scaleY, radius, 0, Math.PI * 2);
     miniCtx.fill();
   }
 
