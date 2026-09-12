@@ -8,9 +8,12 @@ import {
   initializeBeaconSystem,
   stepBeaconSystem,
 } from '../src/game-beacon.mjs';
-import { initializeCombatState } from '../src/game-combat.mjs';
+import { initializeCombatState, stepCombat } from '../src/game-combat.mjs';
 import { buildClassicMap, isWalkableWorld } from '../src/game-core.mjs';
-import { infrastructureFrameForPlayer } from '../src/game-infrastructure.mjs';
+import {
+  infrastructureFrameForPlayer,
+  upgradeBuildingPositionsForPlayer,
+} from '../src/game-infrastructure.mjs';
 import {
   MAX_HYDRA_SEPARATION_PUSH,
   stepFormationMovement,
@@ -75,6 +78,25 @@ test('teammates receive separate beacon controls at their own homes', () => {
   assert.notDeepEqual(firstPads.map((pad) => pad.id), teammatePads.map((pad) => pad.id));
 });
 
+test('control islands keep beacon pads separated and upgrade buildings on-island', () => {
+  const { map, state } = setup();
+  const pads = beaconPadsForPlayer(state, 0);
+  let minDistance = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < pads.length; i += 1) {
+    for (let j = i + 1; j < pads.length; j += 1) {
+      minDistance = Math.min(minDistance, Math.hypot(pads[i].x - pads[j].x, pads[i].y - pads[j].y));
+    }
+  }
+  assert.ok(minDistance > 35);
+
+  const player = state.players[0];
+  const frame = infrastructureFrameForPlayer(player);
+  assert.equal(isWalkableWorld(map, frame.center.x, frame.center.y), true);
+  for (const position of upgradeBuildingPositionsForPlayer(player)) {
+    assert.equal(isWalkableWorld(map, position.x, position.y), true);
+  }
+});
+
 test('a zealot entering a beacon pad rallies all friendly hydras and returns home', () => {
   const { map, state } = setup();
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
@@ -113,11 +135,45 @@ test('a new manual command can override the zealot return order while it is movi
   stepBeaconSystem(state, map, 16);
   assert.equal(zealot.orderType, 'beacon-return');
 
-  const target = map.zones[12];
+  const target = beaconPadsForPlayer(state, 0).find((candidate) => candidate.direction === 'W');
   const ordered = assignMoveOrders(map, state, new Set([zealot.id]), target);
 
   assert.equal(ordered, 1);
   assert.ok(zealot.path.length > 1);
+});
+
+test('attack-move fights in place and resumes its original route when the area is clear', () => {
+  const { map, state } = setup();
+  stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
+
+  const own = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
+  const enemy = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 2);
+  const target = map.zones[16];
+  assert.ok(own);
+  assert.ok(enemy);
+
+  const ordered = assignMoveOrders(
+    map,
+    state,
+    new Set([own.id]),
+    target,
+    { orderType: 'attack-move' },
+  );
+  assert.equal(ordered, 1);
+
+  enemy.x = own.x + 40;
+  enemy.y = own.y;
+  const before = { x: own.x, y: own.y };
+  stepCombat(state, map, 16);
+  assert.equal(own.attackMoveEngaged, true);
+  stepFormationMovement(state, map, 50);
+  assert.ok(Math.hypot(own.x - before.x, own.y - before.y) < 0.01);
+
+  enemy.hp = 0;
+  stepCombat(state, map, 800);
+  assert.equal(own.attackMoveEngaged, false);
+  stepFormationMovement(state, map, 50);
+  assert.ok(Math.hypot(own.x - before.x, own.y - before.y) > 1);
 });
 
 test('overlapping friendly hydras separate gradually without teleporting', () => {

@@ -19,7 +19,7 @@ import {
   drawRtsSunken,
   drawRtsUnit,
 } from '/public/rts-render-v3.mjs';
-import { combatShakeOffset, minimapUnitRadius } from '/src/rts-feel.mjs';
+import { minimapUnitRadius } from '/src/rts-feel.mjs';
 import { playCombatImpact, playUiCue, primeRtsAudio } from '/public/rts-audio.mjs';
 
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
@@ -760,14 +760,19 @@ function drawZones() {
       ctx.restore();
     } else {
       ctx.save();
-      ctx.globalAlpha = 0.35;
-      ctx.strokeStyle = '#789095';
-      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = '#43e6b1';
       ctx.beginPath();
-      ctx.moveTo(center.x - 5, center.y);
-      ctx.lineTo(center.x + 5, center.y);
-      ctx.moveTo(center.x, center.y - 5);
-      ctx.lineTo(center.x, center.y + 5);
+      ctx.ellipse(center.x, center.y, 58 * CAMERA_ZOOM, 40 * CAMERA_ZOOM, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = '#6ff5c8';
+      ctx.lineWidth = Math.max(1, 1.5 * CAMERA_ZOOM);
+      ctx.beginPath();
+      ctx.moveTo(center.x - 8 * CAMERA_ZOOM, center.y);
+      ctx.lineTo(center.x + 8 * CAMERA_ZOOM, center.y);
+      ctx.moveTo(center.x, center.y - 8 * CAMERA_ZOOM);
+      ctx.lineTo(center.x, center.y + 8 * CAMERA_ZOOM);
       ctx.stroke();
       ctx.restore();
     }
@@ -865,9 +870,7 @@ function drawDrag() {
 
 function renderBattlefield() {
   frameEffects = visualEffects();
-  const shake = combatShakeOffset(frameEffects, visualFrameTime);
   ctx.save();
-  ctx.translate(shake.x, shake.y);
   drawTerrain();
   drawFog();
   drawZones();
