@@ -11,7 +11,7 @@ export const ZEALOT_SPEED = 140;
 export const ZEALOT_VISION_RADIUS = 96;
 export const BEACON_PAD_RADIUS = 17;
 
-const PAD_DISTANCE = 52;
+const PAD_DISTANCE = 64;
 const BEACON_CENTER_Y_OFFSET = -56;
 
 export const BEACON_DIRECTIONS = Object.freeze([
@@ -79,10 +79,9 @@ export function initializeBeaconSystem(state, map) {
       state.beaconCenters.set(player.slot, center);
 
       for (const direction of BEACON_DIRECTIONS) {
-        const normalized = normalizedDirection(direction);
         const desired = {
-          x: center.x + normalized.x * PAD_DISTANCE,
-          y: center.y + normalized.y * PAD_DISTANCE,
+          x: center.x + direction.dx * PAD_DISTANCE,
+          y: center.y + direction.dy * PAD_DISTANCE,
         };
         const point = nearestWalkablePoint(map, desired.x, desired.y, 4) ?? desired;
         state.beaconPads.push({
