@@ -314,11 +314,16 @@ export function stepCombat(state, map, deltaMs) {
     if (unit.hp <= 0) continue;
     unit.attackCooldownMs = Math.max(0, (unit.attackCooldownMs ?? 0) - deltaMs);
     unit.attackFlashMs = Math.max(0, (unit.attackFlashMs ?? 0) - deltaMs);
-    if (unit.type !== 'hydra' || unit.attackCooldownMs > 0) continue;
+    if (unit.type !== 'hydra') continue;
 
     const attackerOwnerSlot = unitOwnerSlot(unit);
     const range = hydraAttackRange(state, attackerOwnerSlot);
     const enemyUnit = nearestEnemyUnit(state, unit, range, unitGrid);
+    const enemySunken = enemyUnit ? null : nearestEnemySunken(map, unit, range, sunkenGrid);
+    unit.attackMoveEngaged = unit.orderType === 'attack-move'
+      && Boolean(enemyUnit || enemySunken);
+    if (unit.attackCooldownMs > 0) continue;
+
     if (enemyUnit) {
       const targetOwnerSlot = unitOwnerSlot(enemyUnit);
       const armor = enemyUnit.type === 'hydra'
@@ -333,7 +338,6 @@ export function stepCombat(state, map, deltaMs) {
       continue;
     }
 
-    const enemySunken = nearestEnemySunken(map, unit, range, sunkenGrid);
     if (!enemySunken) {
       unit.currentTarget = null;
       continue;

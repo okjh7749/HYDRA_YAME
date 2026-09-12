@@ -30,6 +30,8 @@ test('multiplayer match uses a full-screen camera viewport with in-world HUD', a
   assert.match(client, /minimap\.addEventListener\('pointerdown'/);
   assert.match(client, /window\.addEventListener\('pointermove'/);
   assert.match(client, /const edge = 30;/);
+  assert.doesNotMatch(client, /combatShakeOffset|translate\(shake\.x/);
+  assert.match(client, /fillStyle = '#43e6b1'/);
   assert.match(client, /event\.code === 'KeyA'/);
   assert.match(client, /type: 'attack-move'/);
   assert.match(client, /function panCameraFromMinimap\(/);

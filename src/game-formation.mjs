@@ -110,6 +110,10 @@ function pathVelocity(unit, deltaSeconds) {
     return { x: 0, y: 0 };
   }
 
+  if (unit.type === 'hydra' && unit.orderType === 'attack-move' && unit.attackMoveEngaged) {
+    return { x: 0, y: 0 };
+  }
+
   const desiredFacing = Math.atan2(dy, dx);
   unit.facing = turnTowards(
     unit.facing ?? desiredFacing,
@@ -137,7 +141,11 @@ export function stepFormationMovement(state, map, deltaMs) {
     let moveX = pathMove.x;
     let moveY = pathMove.y;
 
-    if (unit.type === 'hydra' && unit.hp > 0) {
+    if (
+      unit.type === 'hydra'
+      && unit.hp > 0
+      && !(unit.orderType === 'attack-move' && unit.attackMoveEngaged)
+    ) {
       const maxPush = Math.min(
         MAX_HYDRA_SEPARATION_PUSH,
         HYDRA_SEPARATION_SPEED * deltaSeconds,

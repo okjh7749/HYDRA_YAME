@@ -1,3 +1,5 @@
+import { CONTROL_ISLANDS } from './game-infrastructure.mjs';
+
 export const MAP_TILES = 64;
 export const TILE_SIZE = 32;
 export const CLASSIC_ZONE_SPAN = 384;
@@ -77,6 +79,10 @@ export function buildClassicMap() {
     });
   }
 
+  for (const island of CONTROL_ISLANDS) {
+    fillRect(map, island.left, island.top, island.right, island.bottom);
+  }
+
   return map;
 }
 
@@ -138,8 +144,16 @@ export function nearestWalkablePoint(map, x, y, maxRadius = 16) {
 }
 
 function heuristic(a, b) {
-  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  const dx = Math.abs(a.x - b.x);
+  const dy = Math.abs(a.y - b.y);
+  return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
 }
+
+const PATH_DIRECTIONS = Object.freeze([
+  [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
+  [1, 1, Math.SQRT2], [1, -1, Math.SQRT2],
+  [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2],
+]);
 
 export function findPath(map, startWorld, targetWorld) {
   const start = worldToTile(map, startWorld.x, startWorld.y);
@@ -174,12 +188,18 @@ export function findPath(map, startWorld, targetWorld) {
       return path;
     }
 
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    for (const [dx, dy, cost] of PATH_DIRECTIONS) {
       const nx = current.x + dx;
       const ny = current.y + dy;
       if (!isWalkableTile(map, nx, ny)) continue;
+      if (
+        dx !== 0
+        && dy !== 0
+        && (!isWalkableTile(map, current.x + dx, current.y)
+          || !isWalkableTile(map, current.x, current.y + dy))
+      ) continue;
       const neighborKey = `${nx},${ny}`;
-      const tentativeG = current.g + 1;
+      const tentativeG = current.g + cost;
       if (tentativeG >= (gScore.get(neighborKey) ?? Number.POSITIVE_INFINITY)) continue;
 
       cameFrom.set(neighborKey, { x: current.x, y: current.y });

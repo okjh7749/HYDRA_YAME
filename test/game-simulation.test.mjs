@@ -102,7 +102,7 @@ test('local zone production pauses at the classic 80-hydra presence cap', () => 
   assert.equal(spawned.some((unit) => unit.ownerSlot === 0 && unit.sourceZoneId === startZone.id), false);
 });
 
-test('the classic 80 Men cap counts the overlord and beacon zealot', () => {
+test('the classic 80 Men cap excludes the isolated beacon zealot', () => {
   const map = buildClassicMap();
   const state = createSimulation(map, { localTeam: 0 });
   initializeCombatState(state, map);
@@ -112,7 +112,7 @@ test('the classic 80 Men cap counts the overlord and beacon zealot', () => {
 
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS * (MAX_LOCAL_HYDRAS_PER_ZONE + 1));
 
-  assert.equal(countHydrasNearZone(state, startZone), MAX_LOCAL_HYDRAS_PER_ZONE - 1);
+  assert.equal(countHydrasNearZone(state, startZone), MAX_LOCAL_HYDRAS_PER_ZONE);
 });
 
 test('box selection only returns units owned by the requested team', () => {

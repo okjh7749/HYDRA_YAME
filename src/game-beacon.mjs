@@ -11,7 +11,7 @@ export const ZEALOT_SPEED = 140;
 export const ZEALOT_VISION_RADIUS = 96;
 export const BEACON_PAD_RADIUS = 17;
 
-const PAD_DISTANCE = 28;
+const PAD_DISTANCE = 52;
 const BEACON_CENTER_Y_OFFSET = -56;
 
 export const BEACON_DIRECTIONS = Object.freeze([

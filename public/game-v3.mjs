@@ -47,7 +47,7 @@ import {
   drawRtsSunken,
   drawRtsUnit,
 } from '/public/rts-render-v3.mjs';
-import { combatShakeOffset, minimapUnitRadius } from '/src/rts-feel.mjs';
+import { minimapUnitRadius } from '/src/rts-feel.mjs';
 import { playCombatImpact, playUiCue, primeRtsAudio } from '/public/rts-audio.mjs';
 
 const LOCAL_TEAM = 0;
@@ -217,13 +217,19 @@ function drawZones() {
       ctx.restore();
     } else if (zoneVisible) {
       ctx.save();
-      ctx.globalAlpha = 0.35;
-      ctx.strokeStyle = '#789095';
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = '#43e6b1';
       ctx.beginPath();
-      ctx.moveTo(x - 4, y);
-      ctx.lineTo(x + 4, y);
-      ctx.moveTo(x, y - 4);
-      ctx.lineTo(x, y + 4);
+      ctx.ellipse(x, y, 58, 40, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = '#6ff5c8';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x - 8, y);
+      ctx.lineTo(x + 8, y);
+      ctx.moveTo(x, y - 8);
+      ctx.lineTo(x, y + 8);
       ctx.stroke();
       ctx.restore();
     }
@@ -592,9 +598,7 @@ function updateBuildingHud() {
 
 function render(forceMinimap = false) {
   visionSources = getVisionSources(simulation, map, LOCAL_TEAM);
-  const shake = combatShakeOffset(simulation.effects, performance.now());
   ctx.save();
-  ctx.translate(shake.x, shake.y);
   drawTerrain();
   drawFog();
   drawZones();

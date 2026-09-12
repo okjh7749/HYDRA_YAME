@@ -230,6 +230,7 @@ export function assignMoveOrders(map, state, unitIds, targetWorld, { orderType =
     unit.path = path;
     unit.pathIndex = Math.min(1, path.length);
     unit.orderType = orderType;
+    unit.attackMoveEngaged = false;
     unit.attackMoveTarget = orderType === 'attack-move'
       ? { x: targetWorld.x, y: targetWorld.y } : null;
     ordered += 1;

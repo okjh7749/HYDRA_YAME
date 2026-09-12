@@ -26,6 +26,8 @@ test('classic mode shares the detailed RTS terrain and unit renderer', async () 
   const renderStart = classic.indexOf('function render(');
   const renderEnd = classic.indexOf('function selectFromDrag()', renderStart);
   const renderBlock = classic.slice(renderStart, renderEnd);
+  assert.doesNotMatch(renderBlock, /combatShakeOffset|translate\(shake\.x/);
+  assert.match(classic, /fillStyle = '#43e6b1'/);
   assert.ok(renderBlock.indexOf('drawFog();') < renderBlock.indexOf('drawUnits();'));
   assert.match(
     classic,
