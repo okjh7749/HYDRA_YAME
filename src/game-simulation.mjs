@@ -203,7 +203,7 @@ export function assignMoveOrders(map, state, unitIds, targetWorld, { orderType =
   const groupedPaths = new Map();
 
   selected.forEach((unit, index) => {
-    const baseOffset = !relaxedFormation && unit.type === 'hydra'
+    const baseOffset = unit.type === 'hydra'
       ? formationOffset(index, selected.length)
       : { x: 0, y: 0 };
     const offset = rotateOffset(baseOffset, heading + Math.PI / 2);
@@ -216,7 +216,8 @@ export function assignMoveOrders(map, state, unitIds, targetWorld, { orderType =
 
     let path;
     if (relaxedFormation) {
-      const groupKey = `${Math.floor(unit.x / PATH_GROUP_WORLD_SIZE)},${Math.floor(unit.y / PATH_GROUP_WORLD_SIZE)}`;
+      const groupKey = `${Math.floor(unit.x / PATH_GROUP_WORLD_SIZE)},${Math.floor(unit.y / PATH_GROUP_WORLD_SIZE)}`
+        + `>${Math.floor(snappedTarget.x / 32)},${Math.floor(snappedTarget.y / 32)}`;
       path = groupedPaths.get(groupKey);
       if (!path) {
         path = findPath(map, { x: unit.x, y: unit.y }, snappedTarget);

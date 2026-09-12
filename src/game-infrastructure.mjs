@@ -1,23 +1,34 @@
 const TEAM_CORNERS = Object.freeze([
+  Object.freeze({ x: 256, y: 1792 }),
   Object.freeze({ x: 256, y: 256 }),
   Object.freeze({ x: 1792, y: 256 }),
   Object.freeze({ x: 1792, y: 1792 }),
-  Object.freeze({ x: 256, y: 1792 }),
 ]);
 
 export const CONTROL_ISLANDS = Object.freeze([
-  Object.freeze({ slot: 0, left: 1, top: 1, right: 5, bottom: 5, x: 112, y: 112 }),
-  Object.freeze({ slot: 1, left: 8, top: 8, right: 12, bottom: 12, x: 336, y: 336 }),
-  Object.freeze({ slot: 2, left: 51, top: 1, right: 55, bottom: 5, x: 1712, y: 112 }),
-  Object.freeze({ slot: 3, left: 58, top: 8, right: 62, bottom: 12, x: 1936, y: 336 }),
-  Object.freeze({ slot: 4, left: 58, top: 51, right: 62, bottom: 55, x: 1936, y: 1712 }),
-  Object.freeze({ slot: 5, left: 51, top: 58, right: 55, bottom: 62, x: 1712, y: 1936 }),
-  Object.freeze({ slot: 6, left: 1, top: 51, right: 5, bottom: 55, x: 112, y: 1712 }),
-  Object.freeze({ slot: 7, left: 8, top: 58, right: 12, bottom: 62, x: 336, y: 1936 }),
+  Object.freeze({ slot: 0, left: 1, top: 51, right: 5, bottom: 55, x: 112, y: 1712 }),
+  Object.freeze({ slot: 1, left: 8, top: 58, right: 12, bottom: 62, x: 336, y: 1936 }),
+  Object.freeze({ slot: 2, left: 1, top: 8, right: 5, bottom: 12, x: 112, y: 336 }),
+  Object.freeze({ slot: 3, left: 8, top: 1, right: 12, bottom: 5, x: 336, y: 112 }),
+  Object.freeze({ slot: 4, left: 51, top: 1, right: 55, bottom: 5, x: 1712, y: 112 }),
+  Object.freeze({ slot: 5, left: 58, top: 8, right: 62, bottom: 12, x: 1936, y: 336 }),
+  Object.freeze({ slot: 6, left: 58, top: 51, right: 62, bottom: 55, x: 1936, y: 1712 }),
+  Object.freeze({ slot: 7, left: 51, top: 58, right: 55, bottom: 62, x: 1712, y: 1936 }),
 ]);
 
 export function controlIslandForPlayer(player) {
-  return CONTROL_ISLANDS.find((island) => island.slot === player.slot) ?? null;
+  let nearest = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const island of CONTROL_ISLANDS) {
+    const dx = island.x - player.homeX;
+    const dy = island.y - player.homeY;
+    const distance = dx * dx + dy * dy;
+    if (distance < nearestDistance) {
+      nearest = island;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
 }
 
 export const INFRASTRUCTURE_CORNER_PULL = 128;
