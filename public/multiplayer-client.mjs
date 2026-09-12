@@ -123,7 +123,10 @@ function command(commandPayload) {
 
 function acceptSnapshot(message, { source = 'server', hudMetadataChanged = true } = {}) {
   previousSnapshot = snapshot;
-  previousUnitsById = new Map((previousSnapshot?.units ?? []).map((unit) => [unit.id, unit]));
+  previousUnitsById.clear();
+  for (const unit of previousSnapshot?.units ?? []) {
+    previousUnitsById.set(unit.id, unit);
+  }
   snapshot = message;
   fogCacheKey = '';
   snapshotReceivedAt = performance.now();

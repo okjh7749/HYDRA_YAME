@@ -41,4 +41,6 @@ test('multiplayer lockstep simulation runs in a module worker with backlog fallb
   assert.match(client, /nextSnapshot\.upgrades = snapshot\?\.upgrades \?\? \{\}/);
   assert.match(client, /hudMetadataChanged: Boolean\(message\.hudMetadataIncluded\)/);
   assert.match(client, /if \(hudMetadataChanged\) \{[\s\S]*renderScoreboard\(\);[\s\S]*renderUpgradeState\(\);/);
+  assert.match(client, /previousUnitsById\.clear\(\)/);
+  assert.match(client, /for \(const unit of previousSnapshot\?\.units \?\? \[\]\)/);
 });
