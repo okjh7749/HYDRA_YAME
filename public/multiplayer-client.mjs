@@ -121,7 +121,7 @@ function command(commandPayload) {
   });
 }
 
-function acceptSnapshot(message, { source = 'server' } = {}) {
+function acceptSnapshot(message, { source = 'server', hudMetadataChanged = true } = {}) {
   previousSnapshot = snapshot;
   previousUnitsById = new Map((previousSnapshot?.units ?? []).map((unit) => [unit.id, unit]));
   snapshot = message;
@@ -131,7 +131,7 @@ function acceptSnapshot(message, { source = 'server' } = {}) {
   for (const effect of message.effects ?? []) {
     if ((effect.elapsedMs ?? 0) <= impactWindowMs) playCombatImpact(effect);
   }
-  renderSnapshot();
+  renderSnapshot({ hudMetadataChanged });
 }
 
 function lockstepRenderingHealthy() {
@@ -240,6 +240,10 @@ function stopLockstepWorker({ failed = false } = {}) {
 function inflateLockstepWorkerSnapshot(message) {
   const nextSnapshot = message.snapshot;
   if (!nextSnapshot) return null;
+  if (!message.hudMetadataIncluded) {
+    nextSnapshot.teams = snapshot?.teams ?? [];
+    nextSnapshot.upgrades = snapshot?.upgrades ?? {};
+  }
   if (!message.unitFrame?.buffer) return nextSnapshot;
   lockstepRenderUnitCacheIndex ^= 1;
   nextSnapshot.units = unpackRenderUnitFrame(
@@ -278,7 +282,10 @@ function handleLockstepWorkerMessage(event) {
     lockstepChecksumChecks = message.checksumChecks ?? lockstepChecksumChecks;
     const nextSnapshot = inflateLockstepWorkerSnapshot(message);
     if (nextSnapshot && lockstepRenderingHealthy()) {
-      acceptSnapshot(nextSnapshot, { source: 'lockstep' });
+      acceptSnapshot(nextSnapshot, {
+        source: 'lockstep',
+        hudMetadataChanged: Boolean(message.hudMetadataIncluded),
+      });
     }
     return;
   }
@@ -901,7 +908,7 @@ function renderSelectionInfo() {
   selectionInfo.textContent = `${types} · HP ${hp}`;
 }
 
-function renderSnapshot() {
+function renderSnapshot({ hudMetadataChanged = true } = {}) {
   if (!snapshot) return;
   showGame();
   if (snapshot.match.phase === 'running' && lastMatchPhase !== 'running') {
@@ -917,8 +924,10 @@ function renderSnapshot() {
     ? 'ATTACK MOVE · 좌클릭으로 목표 지정'
     : `Lockstep ${lockstepHealth} · local ${lockstepLocalTick ?? '-'} · q${lockstepWorkerBacklog} · Snapshot #${snapshot.sequence} · server ${snapshot.serverTick}`;
   pruneSelection();
-  renderScoreboard();
-  renderUpgradeState();
+  if (hudMetadataChanged) {
+    renderScoreboard();
+    renderUpgradeState();
+  }
   renderOverlay();
   renderSelectionInfo();
   renderBattlefield();

@@ -9,6 +9,8 @@ import {
 } from '/src/game-room.mjs';
 import { packRenderUnitPoolFrame } from '/src/render-unit-frame.mjs';
 
+const HUD_METADATA_INTERVAL_TICKS = 5;
+
 let room = null;
 let clientId = null;
 let localSnapshotSequence = 1;
@@ -17,11 +19,12 @@ let checksumChecks = 0;
 function postSnapshot(serial = 0) {
   if (!room || !clientId) return;
   const projection = createClientProjectionContext(room, clientId);
+  const includeHudMetadata = serial === 0 || room.tick % HUD_METADATA_INTERVAL_TICKS === 0;
   const snapshot = projectLockstepSnapshot(
     room,
     clientId,
     localSnapshotSequence++,
-    { includeUnits: false, projection },
+    { includeUnits: false, includeHudMetadata, projection },
   );
   if (!snapshot) return;
   const visibleIndexes = visibleUnitPoolIndexesForClient(room, clientId, projection);
@@ -33,6 +36,7 @@ function postSnapshot(serial = 0) {
     serial,
     localTick: room.tick,
     checksumChecks,
+    hudMetadataIncluded: includeHudMetadata,
   }, [unitFrame.buffer]);
 }
 
