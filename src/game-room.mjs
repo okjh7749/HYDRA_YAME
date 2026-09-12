@@ -478,7 +478,7 @@ export function visibleUnitPoolIndexesForClient(room, clientId, projection = nul
   return indexes;
 }
 
-export function snapshotForClient(room, clientId, { includeUnits = true, projection = null } = {}) {
+export function snapshotForClient(room, clientId, { includeUnits = true, includeHudMetadata = true, projection = null } = {}) {
   const context = projection ?? createClientProjectionContext(room, clientId);
   if (!context) return null;
   const { roomPlayer, team, fullVision, playerState, visionSources } = context;
@@ -565,8 +565,8 @@ export function snapshotForClient(room, clientId, { includeUnits = true, project
           : (room.state.match.winnerTeam === team ? 'victory' : 'defeat')),
       events: room.state.match.events.slice(-8),
     },
-    teams: teamRowsForClient(room, team, fullVision),
-    upgrades: { ...(getPlayerState(room.state, roomPlayer.slot)?.upgrades ?? {}) },
+    teams: includeHudMetadata ? teamRowsForClient(room, team, fullVision) : null,
+    upgrades: includeHudMetadata ? { ...(playerState?.upgrades ?? {}) } : null,
     units,
     zones,
     beacons,

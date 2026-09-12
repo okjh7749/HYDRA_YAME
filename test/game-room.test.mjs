@@ -195,6 +195,9 @@ test('snapshots withhold unseen enemy units until the player becomes a spectator
   assert.ok(hiddenEnemy);
 
   const playing = snapshotForClient(room, 'host');
+  const fastProjection = snapshotForClient(room, 'host', { includeHudMetadata: false });
+  assert.equal(fastProjection.teams, null);
+  assert.equal(fastProjection.upgrades, null);
   const playingPoolIds = visibleUnitPoolIndexesForClient(room, 'host')
     .map((index) => room.unitPool.id[index])
     .sort((a, b) => a - b);
