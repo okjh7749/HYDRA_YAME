@@ -102,6 +102,27 @@ test('destroying a sunken neutralizes its zone and awards 150 minerals', () => {
   assert.equal(getPlayerState(state, 0).minerals, before + SUNKEN_KILL_REWARD);
 });
 
+test('hydras keep attacking a sunken once engaged instead of endlessly retargeting nearby hydras', () => {
+  const { map, state } = setup();
+  stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);
+  const attacker = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
+  const enemyHydra = state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 2);
+  const enemyZone = map.zones.find((zone) => zone.ownerSlot === 2);
+  state.units = [attacker, enemyHydra];
+  attacker.x = enemyZone.x + 60;
+  attacker.y = enemyZone.y;
+  attacker.currentTarget = { kind: 'sunken', zoneId: enemyZone.id };
+  enemyHydra.x = attacker.x + 20;
+  enemyHydra.y = attacker.y;
+  const before = enemyZone.sunkenHp;
+
+  stepCombat(state, map, 1);
+
+  assert.ok(enemyZone.sunkenHp < before);
+  assert.equal(enemyHydra.hp, enemyHydra.maxHp);
+  assert.deepEqual(attacker.currentTarget, { kind: 'sunken', zoneId: enemyZone.id });
+});
+
 test('overlord captures a neutral zone only with a strict Any Unit lead and pays 250 minerals', () => {
   const { map, state } = setup();
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS);

@@ -259,6 +259,23 @@ function nearestEnemySunken(map, attacker, range, sunkenGrid = null) {
   return best;
 }
 
+function currentEnemyTarget(state, map, attacker, range) {
+  const target = attacker.currentTarget;
+  if (!target) return null;
+  const rangeSquared = range * range;
+  if (target.kind === 'unit') {
+    const unit = state.units.find((candidate) => candidate.id === target.id);
+    if (!unit || unit.hp <= 0 || unit.team === attacker.team || unit.combatTargetable === false) return null;
+    return distanceSquared(attacker, unit) <= rangeSquared ? { kind: 'unit', value: unit } : null;
+  }
+  if (target.kind === 'sunken') {
+    const zone = map.zones.find((candidate) => candidate.id === target.zoneId);
+    if (!zone || zone.sunkenHp <= 0 || zone.ownerTeam === null || zone.ownerTeam === attacker.team) return null;
+    return distanceSquared(attacker, zone) <= rangeSquared ? { kind: 'sunken', value: zone } : null;
+  }
+  return null;
+}
+
 function destroySunken(state, zone, attackerOwnerSlot) {
   const defeatedOwnerSlot = zoneOwnerSlot(zone);
   if (defeatedOwnerSlot === null) return false;
@@ -318,8 +335,13 @@ export function stepCombat(state, map, deltaMs) {
 
     const attackerOwnerSlot = unitOwnerSlot(unit);
     const range = hydraAttackRange(state, attackerOwnerSlot);
-    const enemyUnit = nearestEnemyUnit(state, unit, range, unitGrid);
-    const enemySunken = enemyUnit ? null : nearestEnemySunken(map, unit, range, sunkenGrid);
+    const lockedTarget = currentEnemyTarget(state, map, unit, range);
+    const enemyUnit = lockedTarget?.kind === 'unit'
+      ? lockedTarget.value
+      : (lockedTarget ? null : nearestEnemyUnit(state, unit, range, unitGrid));
+    const enemySunken = lockedTarget?.kind === 'sunken'
+      ? lockedTarget.value
+      : (lockedTarget || enemyUnit ? null : nearestEnemySunken(map, unit, range, sunkenGrid));
     unit.attackMoveEngaged = unit.orderType === 'attack-move'
       && Boolean(enemyUnit || enemySunken);
     if (unit.attackCooldownMs > 0) continue;
