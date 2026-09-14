@@ -52,8 +52,30 @@
       </div>
       <div class="viewport-actions">
         <button class="home-camera" id="homeCameraButton" type="button">본진</button>
+        <button class="quick-upgrade" id="hydraDenButton" type="button">HD 업글</button>
+        <button class="quick-upgrade" id="evolutionButton" type="button">EV 업글</button>
         <button class="touch-move" id="touchMoveButton" type="button" aria-pressed="false">이동</button>
       </div>
+      <aside class="upgrade-panel battlefield-upgrade-panel" id="upgradePanel" hidden aria-label="업그레이드 패널">
+        <div class="upgrade-panel-head">
+          <div>
+            <div class="eyebrow">UPGRADE CONSOLE</div>
+            <strong id="upgradeBuildingLabel">업그레이드</strong>
+          </div>
+          <div class="upgrade-panel-tools">
+            <span class="upgrade-hint">Shift+클릭 ×5</span>
+            <button class="upgrade-close" id="upgradeCloseButton" type="button" aria-label="업그레이드 패널 닫기">닫기 ×</button>
+          </div>
+        </div>
+        <div class="upgrade-stats" id="upgradeStats"></div>
+        <div class="upgrade-actions">
+          <button type="button" data-upgrade="attack">공격력</button>
+          <button type="button" data-upgrade="defense">방어력</button>
+          <button type="button" data-upgrade="range">사거리</button>
+          <button type="button" data-upgrade="speed">이동속도</button>
+        </div>
+        <div class="balance-note" id="balanceNote"></div>
+      </aside>
     </section>
 
     <section class="bottom-panel">
@@ -64,16 +86,6 @@
           <h2 id="selectionTitle">Combat Group</h2>
           <p id="unitStatus">접전 시 자동 공격 · 성큰 파괴 후 오버로드로 점령하세요.</p>
           <div class="selection-details" id="selectionDetails" aria-live="polite"></div>
-          <div class="upgrade-panel" id="upgradePanel" hidden>
-            <div class="upgrade-stats" id="upgradeStats"></div>
-            <div class="upgrade-actions">
-              <button type="button" data-upgrade="attack">공격력</button>
-              <button type="button" data-upgrade="defense">방어력</button>
-              <button type="button" data-upgrade="range">사거리</button>
-              <button type="button" data-upgrade="speed">이동속도</button>
-            </div>
-            <div class="balance-note" id="balanceNote"></div>
-          </div>
         </div>
       </div>
       <div class="map-card">

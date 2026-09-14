@@ -13,6 +13,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow: hidden;
   background:
     radial-gradient(circle at top, rgba(36, 61, 68, 0.28), transparent 34rem),
     #07090c;
@@ -20,8 +21,11 @@ body {
 
 .shell {
   width: min(1400px, 100%);
+  height: 100dvh;
   margin: 0 auto;
-  padding: 14px;
+  padding: 10px 14px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 body.booting .shell {
@@ -66,8 +70,7 @@ body.booting .shell {
 
 .viewport-wrap {
   position: relative;
-  height: min(68vh, 760px);
-  min-height: 520px;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid #2c4348;
   background: #000;
@@ -134,9 +137,9 @@ body.booting .shell {
 .bottom-panel {
   display: grid;
   grid-template-columns: 1fr 272px;
-  gap: 12px;
-  min-height: 168px;
-  padding: 12px;
+  gap: 10px;
+  min-height: 132px;
+  padding: 9px;
   border: 1px solid #2c4348;
   border-top: 0;
   background: linear-gradient(180deg, #10181c, #090d0f);
@@ -151,15 +154,15 @@ body.booting .shell {
 .unit-card {
   display: flex;
   align-items: center;
-  gap: 18px;
-  padding: 18px;
+  gap: 14px;
+  padding: 10px 14px;
 }
 
 .portrait {
   display: grid;
   place-items: center;
-  width: 92px;
-  height: 92px;
+  width: 76px;
+  height: 76px;
   border: 2px solid #6ce486;
   border-radius: 50%;
   background:
@@ -200,28 +203,76 @@ body.booting .shell {
   min-width: 0;
 }
 
-.upgrade-panel {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid #26373c;
-}
-
 .upgrade-panel[hidden] {
   display: none;
 }
 
+.battlefield-upgrade-panel {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 8;
+  width: min(660px, calc(100% - 28px));
+  transform: translateX(-50%);
+  padding: 12px;
+  border: 1px solid rgba(115, 216, 155, 0.7);
+  border-radius: 6px;
+  background: rgba(5, 15, 18, 0.94);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.upgrade-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.upgrade-panel-head strong {
+  display: block;
+  margin-top: 2px;
+  color: #eaffd9;
+  font-size: 14px;
+}
+
+.upgrade-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.upgrade-hint {
+  color: #d9ff8d;
+  font: 700 10px ui-monospace, monospace;
+}
+
+.upgrade-close {
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid #526d72;
+  border-radius: 3px;
+  background: rgba(12, 27, 31, 0.9);
+  color: #cbdadb;
+  font: 700 10px ui-monospace, monospace;
+  cursor: pointer;
+}
+.upgrade-close:hover { border-color: #d9ff8d; color: #f2ffd9; }
+
 .upgrade-stats {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: #b9c9cc;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .upgrade-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(150px, 1fr));
-  gap: 8px;
-  max-width: 520px;
+  grid-template-columns: repeat(4, minmax(118px, 1fr));
+  gap: 7px;
+  max-width: none;
 }
 
 .upgrade-actions button {
@@ -304,7 +355,8 @@ body.booting .shell {
 }
 
 @media (max-width: 700px) {
-  .shell { padding: 6px; }
+  body { overflow: auto; }
+  .shell { height: auto; min-height: 100dvh; padding: 6px; display: block; }
 
   .hud {
     align-items: flex-start;
@@ -351,6 +403,17 @@ body.booting .shell {
 }
 
 .viewport-actions .home-camera { position: static; }
+.quick-upgrade {
+  padding: 7px 10px;
+  border: 1px solid #5f8e91;
+  border-radius: 3px;
+  background: rgba(7, 20, 23, 0.88);
+  color: #e9ffff;
+  font: 700 11px ui-monospace, monospace;
+  cursor: pointer;
+}
+.quick-upgrade:hover { border-color: #73d89b; color: #d9ff8d; }
+.quick-upgrade[aria-pressed="true"] { border-color: #d9ff8d; color: #d9ff8d; background: rgba(30, 57, 36, 0.92); }
 .touch-move {
   display: none;
   padding: 7px 10px;
@@ -365,4 +428,6 @@ body.booting .shell {
 
 @media (pointer: coarse), (max-width: 900px) {
   .touch-move { display: inline-block; }
+  .battlefield-upgrade-panel { bottom: 8px; width: min(560px, calc(100% - 16px)); }
+  .upgrade-actions { grid-template-columns: repeat(2, minmax(118px, 1fr)); }
 }

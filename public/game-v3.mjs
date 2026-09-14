@@ -87,6 +87,9 @@ const selectionCountNode = document.querySelector('#selectionCount');
 const portraitLabelNode = document.querySelector('#portraitLabel');
 const selectionTitleNode = document.querySelector('#selectionTitle');
 const upgradePanelNode = document.querySelector('#upgradePanel');
+const upgradeBuildingLabelNode = document.querySelector('#upgradeBuildingLabel');
+const hydraDenButtonNode = document.querySelector('#hydraDenButton');
+const evolutionButtonNode = document.querySelector('#evolutionButton');
 const upgradeStatsNode = document.querySelector('#upgradeStats');
 const balanceNoteNode = document.querySelector('#balanceNote');
 const hudScopeNode = document.querySelector('#hudScopeLabel');
@@ -118,6 +121,7 @@ const initialOverlord = simulation.units.find(
 const selectedIds = new Set(initialOverlord ? [initialOverlord.id] : []);
 let selectedBuildingId = null;
 let selectedSunkenZoneId = null;
+let quickUpgradeReturnSelection = null;
 const exploration = createClientFogMemory(map);
 const matchRuntime = createClassicMatchRuntime({
   map,
@@ -623,7 +627,13 @@ function pruneSelection() {
   }
 }
 
+function syncQuickUpgradeButtons(building) {
+  hydraDenButtonNode?.setAttribute('aria-pressed', String(building?.type === 'hydra-den'));
+  evolutionButtonNode?.setAttribute('aria-pressed', String(building?.type === 'evolution'));
+}
+
 function renderUpgradePanel(building) {
+  syncQuickUpgradeButtons(building);
   if (!building) {
     if (!upgradePanelNode.hidden) upgradePanelNode.hidden = true;
     delete upgradePanelNode.dataset.signature;
@@ -631,6 +641,7 @@ function renderUpgradePanel(building) {
   }
 
   if (upgradePanelNode.hidden) upgradePanelNode.hidden = false;
+  if (upgradeBuildingLabelNode) upgradeBuildingLabelNode.textContent = building.label;
   const player = getPlayerState(simulation, simulation.localPlayerSlot);
   const options = upgradeOptionsForBuilding(building);
   const signature = [
@@ -927,6 +938,9 @@ document.querySelector('#homeCameraButton')?.addEventListener('click', () => {
   centerCameraOnLocalHome();
   render(true);
 });
+hydraDenButtonNode?.addEventListener('click', () => openQuickUpgrade('hydra-den'));
+evolutionButtonNode?.addEventListener('click', () => openQuickUpgrade('evolution'));
+document.querySelector('#upgradeCloseButton')?.addEventListener('click', closeQuickUpgrade);
 
 document.querySelector('#touchMoveButton')?.addEventListener('click', (event) => {
   input.touchMoveMode = !input.touchMoveMode;
@@ -989,6 +1003,37 @@ function selectOwnedBuildingType(type) {
   updateReadabilitySelectionUi();
 }
 
+function openQuickUpgrade(type) {
+  const activeBuilding = getUpgradeBuilding(simulation, selectedBuildingId);
+  if (activeBuilding?.type === type && quickUpgradeReturnSelection !== null) {
+    closeQuickUpgrade();
+    return;
+  }
+  if (quickUpgradeReturnSelection === null) {
+    quickUpgradeReturnSelection = [...selectedIds];
+  }
+  selectOwnedBuildingType(type);
+}
+
+function closeQuickUpgrade() {
+  selectedBuildingId = null;
+  selectedSunkenZoneId = null;
+  selectedIds.clear();
+  for (const id of quickUpgradeReturnSelection ?? []) {
+    const unit = simulation.units.find((candidate) => candidate.id === id && candidate.hp > 0);
+    if (unit && unit.ownerSlot === simulation.localPlayerSlot) selectedIds.add(id);
+  }
+  quickUpgradeReturnSelection = null;
+  renderUpgradePanel(null);
+  transientStatus = selectedIds.size > 0
+    ? `전투 부대 ${selectedIds.size}기 선택 복원`
+    : '업그레이드 패널 닫기';
+  transientStatusMs = 900;
+  updateHud();
+  updateBuildingHud();
+  updateReadabilitySelectionUi();
+}
+
 function centerCameraOnSelection() {
   const units = simulation.units.filter((unit) => selectedIds.has(unit.id) && unit.hp > 0);
   let focus = null;
@@ -1042,6 +1087,11 @@ window.addEventListener('keydown', (event) => {
   if (event.code === 'KeyH') {
     centerCameraOnLocalHome();
     render(true);
+    event.preventDefault();
+    return;
+  }
+  if (event.code === 'Escape' && !upgradePanelNode.hidden) {
+    closeQuickUpgrade();
     event.preventDefault();
     return;
   }

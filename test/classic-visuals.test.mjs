@@ -4,6 +4,8 @@ import test from 'node:test';
 
 const classicUrl = new URL('../public/game-v3.mjs', import.meta.url);
 const rendererUrl = new URL('../public/rts-render.mjs', import.meta.url);
+const htmlUrl = new URL('../public/index-v3.html', import.meta.url);
+const stylesUrl = new URL('../public/styles.css', import.meta.url);
 
 test('classic mode shares the detailed RTS terrain and unit renderer', async () => {
   const [classic, renderer] = await Promise.all([
@@ -67,4 +69,27 @@ test('classic controls expose fast RTS selection and responsive attack-move feed
     classic.indexOf("minimap.addEventListener('pointerdown'"),
   );
   assert.doesNotMatch(canvasContextBlock, /issueMoveCommand/);
+});
+
+test('classic upgrade UI stays inside the battlefield and supports quick open-close flow', async () => {
+  const [classic, html, styles] = await Promise.all([
+    readFile(classicUrl, 'utf8'),
+    readFile(htmlUrl, 'utf8'),
+    readFile(stylesUrl, 'utf8'),
+  ]);
+  const viewportStart = html.indexOf('<section class="viewport-wrap">');
+  const bottomStart = html.indexOf('<section class="bottom-panel">');
+  const upgradeStart = html.indexOf('id="upgradePanel"');
+  assert.ok(viewportStart >= 0 && upgradeStart > viewportStart && upgradeStart < bottomStart);
+  assert.match(html, /id="hydraDenButton"/);
+  assert.match(html, /id="evolutionButton"/);
+  assert.match(html, /id="upgradeCloseButton"/);
+  assert.match(styles, /height: 100dvh/);
+  assert.match(styles, /\.battlefield-upgrade-panel \{/);
+  assert.match(styles, /position: absolute/);
+  assert.match(styles, /bottom: 14px/);
+  assert.match(classic, /function openQuickUpgrade\(type\)/);
+  assert.match(classic, /function closeQuickUpgrade\(\)/);
+  assert.match(classic, /quickUpgradeReturnSelection/);
+  assert.match(classic, /event\.code === 'Escape'/);
 });
