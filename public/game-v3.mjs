@@ -1052,8 +1052,13 @@ window.addEventListener('keyup', (event) => input.keys.delete(event.code));
 
 gameCanvas.addEventListener('pointerdown', (event) => {
   primeRtsAudio();
-  if (event.button !== 0) return;
   const rect = gameCanvas.getBoundingClientRect();
+  if (event.button === 2) {
+    event.preventDefault();
+    issueMoveCommand(event.clientX - rect.left, event.clientY - rect.top);
+    return;
+  }
+  if (event.button !== 0) return;
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
   if (event.pointerType === 'touch' && input.touchMoveMode && selectedIds.size > 0) {
@@ -1139,14 +1144,10 @@ gameCanvas.addEventListener('mouseleave', () => {
 });
 document.addEventListener('contextmenu', (event) => {
   event.preventDefault();
-  event.stopPropagation();
 }, { capture: true });
 
 gameCanvas.addEventListener('contextmenu', (event) => {
-  primeRtsAudio();
   event.preventDefault();
-  const rect = gameCanvas.getBoundingClientRect();
-  issueMoveCommand(event.clientX - rect.left, event.clientY - rect.top);
 });
 
 minimap.addEventListener('pointerdown', (event) => {

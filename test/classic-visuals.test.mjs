@@ -50,4 +50,21 @@ test('classic controls expose fast RTS selection and responsive attack-move feed
   assert.match(classic, /const speed = 700/);
   assert.match(classic, /const edge = 44/);
   assert.match(classic, /document\.addEventListener\('contextmenu'/);
+  const contextMenuBlock = classic.slice(
+    classic.indexOf("document.addEventListener('contextmenu'"),
+    classic.indexOf("gameCanvas.addEventListener('contextmenu'"),
+  );
+  assert.match(contextMenuBlock, /event\.preventDefault\(\)/);
+  assert.doesNotMatch(contextMenuBlock, /stopPropagation/);
+  const pointerDownBlock = classic.slice(
+    classic.indexOf("gameCanvas.addEventListener('pointerdown'"),
+    classic.indexOf("gameCanvas.addEventListener('pointermove'"),
+  );
+  assert.match(pointerDownBlock, /event\.button === 2/);
+  assert.match(pointerDownBlock, /issueMoveCommand\(event\.clientX - rect\.left, event\.clientY - rect\.top\)/);
+  const canvasContextBlock = classic.slice(
+    classic.indexOf("gameCanvas.addEventListener('contextmenu'"),
+    classic.indexOf("minimap.addEventListener('pointerdown'"),
+  );
+  assert.doesNotMatch(canvasContextBlock, /issueMoveCommand/);
 });

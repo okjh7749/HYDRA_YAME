@@ -21,7 +21,7 @@ export const HYDRA_ATTACK_RANGE = 96;
 export const HYDRA_ATTACK_COOLDOWN_MS = 620;
 export const HYDRA_KILL_REWARD = 5;
 
-export const SUNKEN_HP = 9999;
+export const SUNKEN_HP = 6500;
 export const SUNKEN_ARMOR = 10;
 export const SUNKEN_DAMAGE = 45;
 export const SUNKEN_ATTACK_RANGE = 176;

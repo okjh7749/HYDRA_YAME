@@ -133,7 +133,7 @@ test('AI capture delegates to the same Any Unit and 250 mineral trigger as playe
   );
   assert.equal(target.ownerSlot, 2);
   assert.equal(target.ownerTeam, 1);
-  assert.equal(target.sunkenHp, 9999);
+  assert.equal(target.sunkenHp, 6500);
   assert.equal(state.players[2].minerals, before - 250);
   assert.equal(state.units.some((unit) => unit.id === overlord.id), false);
 });
