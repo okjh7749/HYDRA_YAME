@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   AI_MIN_ASSAULT_HYDRAS,
+  AI_OPENING_GRACE_MS,
   chooseAiTarget,
   ensureAiOverlord,
   initializeAiState,
@@ -46,6 +47,35 @@ test('creates one AI controller for every non-local player slot, including the l
   );
 });
 
+test('AI respects the opening grace period before issuing assault orders', () => {
+  const { map, state } = setup();
+  spawnArmy(state, map);
+  const controller = initializeAiState(state).find((item) => item.ownerSlot === 2);
+  controller.decisionCooldownMs = 0;
+
+  state.match.elapsedMs = AI_OPENING_GRACE_MS - 1;
+  assert.deepEqual(stepAi(state, map, 1), []);
+  assert.equal(
+    state.units.some((unit) => unit.type === 'hydra' && unit.ownerSlot === 2 && unit.orderType === 'ai-assault'),
+    false,
+  );
+});
+
+test('AI begins its first assault shortly after the global grace instead of waiting twice', () => {
+  const { map, state } = setup();
+  spawnArmy(state, map);
+  const controller = initializeAiState(state).find((item) => item.ownerSlot === 2);
+
+  state.match.elapsedMs = AI_OPENING_GRACE_MS - 1;
+  assert.deepEqual(stepAi(state, map, 1), []);
+  assert.ok(state.units.some((unit) => unit.type === 'overlord' && unit.ownerSlot === 2));
+
+  state.match.elapsedMs = AI_OPENING_GRACE_MS;
+  const events = stepAi(state, map, 1000);
+  assert.ok(events.some((event) => event.type === 'ai-assault' && event.ownerSlot === 2));
+  assert.ok(controller.decisions >= 1);
+});
+
 test('AI chooses by player ownership and commands only that players hydras', () => {
   const { map, state } = setup();
   spawnArmy(state, map);
@@ -55,6 +85,7 @@ test('AI chooses by player ownership and commands only that players hydras', () 
   assert.notEqual(target.ownerTeam, 1);
 
   const controller = initializeAiState(state).find((item) => item.ownerSlot === 2);
+  state.match.elapsedMs = AI_OPENING_GRACE_MS;
   controller.decisionCooldownMs = 0;
   const events = stepAi(state, map, 1);
   const assault = events.find(

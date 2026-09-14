@@ -21,9 +21,22 @@ import {
 } from '/public/rts-render-v3.mjs';
 import { minimapUnitRadius } from '/src/rts-feel.mjs';
 import { playCombatImpact, playUiCue, primeRtsAudio } from '/public/rts-audio.mjs';
+import { CONTROL_ISLANDS, controlIslandForSlot, controlIslandWorldBounds } from '/src/game-infrastructure.mjs';
+import {
+  FOG_EXPLORED,
+  FOG_VISIBLE,
+  clientFogStateForTile,
+  createClientFogMemory,
+  minimapEventToWorld,
+  pointerEventToWorld,
+  setTextIfChanged,
+  touchTapShouldIssueMove,
+  updateClientFogMemory,
+} from '/src/rts-client-shared.mjs';
 
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
 const map = buildClassicMap();
+const exploration = createClientFogMemory(map);
 const CAMERA_ZOOM = RTS_CAMERA_ZOOM;
 
 const connectionStatus = document.querySelector('#connectionStatus');
@@ -128,6 +141,12 @@ function acceptSnapshot(message, { source = 'server', hudMetadataChanged = true 
     previousUnitsById.set(unit.id, unit);
   }
   snapshot = message;
+  updateClientFogMemory(
+    exploration,
+    map,
+    message.visionSources ?? [],
+    Boolean(message.self?.spectator),
+  );
   fogCacheKey = '';
   snapshotReceivedAt = performance.now();
   const impactWindowMs = source === 'lockstep' ? 5 : 55;
@@ -609,11 +628,7 @@ function worldToCanvas(x, y) {
 }
 
 function eventToWorld(event) {
-  const rect = battlefield.getBoundingClientRect();
-  return {
-    x: camera.x + (event.clientX - rect.left) / CAMERA_ZOOM,
-    y: camera.y + (event.clientY - rect.top) / CAMERA_ZOOM,
-  };
+  return pointerEventToWorld(event, battlefield, camera, CAMERA_ZOOM);
 }
 
 function centerCameraAtWorld(x, y) {
@@ -707,6 +722,28 @@ function drawTerrain() {
   );
 }
 
+function drawControlIslands() {
+  if (!snapshot) return;
+  const islands = snapshot.self.spectator
+    ? CONTROL_ISLANDS
+    : [controlIslandForSlot(snapshot.self.slot)].filter(Boolean);
+  for (const island of islands) {
+    const bounds = controlIslandWorldBounds(island);
+    if (!bounds || !pointOnScreen(island.x, island.y, 180)) continue;
+    const topLeft = worldToCanvas(bounds.left, bounds.top);
+    const width = (bounds.right - bounds.left) * CAMERA_ZOOM;
+    const height = (bounds.bottom - bounds.top) * CAMERA_ZOOM;
+    const own = island.slot === snapshot.self.slot;
+    ctx.save();
+    ctx.fillStyle = own ? 'rgba(22, 42, 47, 0.96)' : 'rgba(15, 28, 32, 0.9)';
+    ctx.strokeStyle = own ? '#75d6d1' : '#49666b';
+    ctx.lineWidth = own ? 2 : 1;
+    ctx.fillRect(topLeft.x, topLeft.y, width, height);
+    ctx.strokeRect(topLeft.x + 0.5, topLeft.y + 0.5, width - 1, height - 1);
+    ctx.restore();
+  }
+}
+
 function pointVisible(x, y) {
   if (snapshot?.self.spectator) return true;
   for (const source of snapshot?.visionSources ?? []) {
@@ -725,24 +762,36 @@ function drawFog() {
     return;
   }
 
-  fogCtx.save();
-  fogCtx.globalCompositeOperation = 'source-over';
   fogCtx.clearRect(0, 0, viewportWidth, viewportHeight);
-  fogCtx.fillStyle = 'rgba(0, 0, 0, 0.92)';
-  fogCtx.fillRect(0, 0, viewportWidth, viewportHeight);
-  fogCtx.globalCompositeOperation = 'destination-out';
-  fogCtx.fillStyle = '#000';
+  const worldWidth = cameraWorldWidth();
+  const worldHeight = cameraWorldHeight();
+  const left = Math.max(0, Math.floor(camera.x / map.tileSize));
+  const top = Math.max(0, Math.floor(camera.y / map.tileSize));
+  const right = Math.min(map.columns - 1, Math.ceil((camera.x + worldWidth) / map.tileSize));
+  const bottom = Math.min(map.rows - 1, Math.ceil((camera.y + worldHeight) / map.tileSize));
 
-  for (const source of snapshot.visionSources ?? []) {
-    if (!pointOnScreen(source.x, source.y, source.radius)) continue;
-    const p = worldToCanvas(source.x, source.y);
-    fogCtx.beginPath();
-    fogCtx.arc(p.x, p.y, source.radius * CAMERA_ZOOM, 0, Math.PI * 2);
-    fogCtx.fill();
+  for (let tileY = top; tileY <= bottom; tileY += 1) {
+    for (let tileX = left; tileX <= right; tileX += 1) {
+      const fogState = clientFogStateForTile(
+        exploration,
+        map,
+        snapshot.visionSources ?? [],
+        tileX,
+        tileY,
+      );
+      if (fogState === FOG_VISIBLE) continue;
+      fogCtx.fillStyle = fogState === FOG_EXPLORED
+        ? 'rgba(0, 0, 0, 0.66)'
+        : 'rgba(0, 0, 0, 0.96)';
+      fogCtx.fillRect(
+        (tileX * map.tileSize - camera.x) * CAMERA_ZOOM,
+        (tileY * map.tileSize - camera.y) * CAMERA_ZOOM,
+        map.tileSize * CAMERA_ZOOM + 1,
+        map.tileSize * CAMERA_ZOOM + 1,
+      );
+    }
   }
-  fogCtx.restore();
   fogCacheKey = cacheKey;
-
   ctx.drawImage(fogCanvas, 0, 0, viewportWidth, viewportHeight);
 }
 
@@ -860,7 +909,7 @@ function drawEffects() {
 }
 
 function drawDrag() {
-  if (!drag) return;
+  if (!drag || drag.pointerType === 'touch') return;
   const start = worldToCanvas(drag.start.x, drag.start.y);
   const current = worldToCanvas(drag.current.x, drag.current.y);
   ctx.strokeStyle = '#7cff91';
@@ -872,6 +921,7 @@ function renderBattlefield() {
   frameEffects = visualEffects();
   ctx.save();
   drawTerrain();
+  drawControlIslands();
   drawFog();
   drawZones();
   drawBeacons();
@@ -937,6 +987,41 @@ function renderSnapshot({ hudMetadataChanged = true } = {}) {
   renderOverlay();
   renderSelectionInfo();
   renderBattlefield();
+}
+
+function nearestOwnUnitAt(point, radius = 28) {
+  if (!snapshot) return null;
+  let nearest = null;
+  let best = radius * radius;
+  for (const unit of snapshot.units ?? []) {
+    if (unit.ownerSlot !== snapshot.self.slot || unit.hp <= 0) continue;
+    const dx = unit.x - point.x;
+    const dy = unit.y - point.y;
+    const distance = dx * dx + dy * dy;
+    if (distance <= best) {
+      nearest = unit;
+      best = distance;
+    }
+  }
+  return nearest;
+}
+
+function issueMove(target) {
+  setAttackMoveArmed(false);
+  if (!snapshot || selectedIds.size === 0 || snapshot.self.spectator || snapshot.match.phase !== 'running') {
+    return false;
+  }
+  const sent = command({
+    type: 'move',
+    unitIds: [...selectedIds],
+    x: target.x,
+    y: target.y,
+  });
+  if (sent) {
+    moveMarker = { x: target.x, y: target.y, startedAt: performance.now() };
+    playUiCue('move');
+  }
+  return sent;
 }
 
 function selectUnits(start, end) {
@@ -1018,6 +1103,7 @@ function handleMessage(message) {
     previousSnapshot = null;
     previousUnitsById = new Map();
     fogCacheKey = '';
+    exploration.fill(0);
     moveMarker = null;
     selectedIds.clear();
     camera.initialized = false;
@@ -1110,23 +1196,64 @@ battlefield.addEventListener('pointerdown', (event) => {
     return;
   }
   const world = eventToWorld(event);
-  drag = { start: world, current: world };
+  drag = {
+    start: world,
+    current: world,
+    pointerType: event.pointerType,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    lastClientX: event.clientX,
+    lastClientY: event.clientY,
+    panning: false,
+  };
   battlefield.setPointerCapture(event.pointerId);
+  if (event.pointerType === 'touch') event.preventDefault();
   renderBattlefield();
 });
 
 battlefield.addEventListener('pointermove', (event) => {
   if (!drag) return;
-  drag.current = eventToWorld(event);
+  if (drag.pointerType === 'touch') {
+    const distance = Math.hypot(
+      event.clientX - drag.startClientX,
+      event.clientY - drag.startClientY,
+    );
+    if (distance > 12) drag.panning = true;
+    if (drag.panning) {
+      camera.x += (drag.lastClientX - event.clientX) / CAMERA_ZOOM;
+      camera.y += (drag.lastClientY - event.clientY) / CAMERA_ZOOM;
+      clampCamera(camera, map, cameraWorldWidth(), cameraWorldHeight());
+    }
+    drag.lastClientX = event.clientX;
+    drag.lastClientY = event.clientY;
+    drag.current = eventToWorld(event);
+    event.preventDefault();
+  } else {
+    drag.current = eventToWorld(event);
+  }
   renderBattlefield();
 });
 
 battlefield.addEventListener('pointerup', (event) => {
   if (event.button !== 0 || !drag) return;
   drag.current = eventToWorld(event);
-  selectUnits(drag.start, drag.current);
+  const wasPanning = Boolean(drag.panning);
+  const dragDistance = Math.hypot(
+    event.clientX - drag.startClientX,
+    event.clientY - drag.startClientY,
+  );
+  if (!wasPanning && touchTapShouldIssueMove({
+    pointerType: event.pointerType,
+    selectedCount: selectedIds.size,
+    hitSelectable: Boolean(nearestOwnUnitAt(drag.current)),
+    dragDistance,
+  })) {
+    issueMove(drag.current);
+  } else if (!wasPanning) {
+    selectUnits(drag.start, drag.current);
+  }
   drag = null;
-  battlefield.releasePointerCapture(event.pointerId);
+  if (battlefield.hasPointerCapture(event.pointerId)) battlefield.releasePointerCapture(event.pointerId);
   renderBattlefield();
 });
 
@@ -1138,18 +1265,7 @@ battlefield.addEventListener('pointercancel', () => {
 battlefield.addEventListener('contextmenu', (event) => {
   primeRtsAudio();
   event.preventDefault();
-  setAttackMoveArmed(false);
-  if (!snapshot || selectedIds.size === 0 || snapshot.self.spectator) return;
-  const target = eventToWorld(event);
-  if (command({
-    type: 'move',
-    unitIds: [...selectedIds],
-    x: target.x,
-    y: target.y,
-  })) {
-    moveMarker = { x: target.x, y: target.y, startedAt: performance.now() };
-    playUiCue('move');
-  }
+  issueMove(eventToWorld(event));
 });
 
 for (const button of document.querySelectorAll('button[data-upgrade]')) {
@@ -1176,9 +1292,17 @@ function drawMinimap() {
   for (let y = 0; y < map.rows; y += 1) {
     for (let x = 0; x < map.columns; x += 1) {
       if (!isWalkableTile(map, x, y)) continue;
-      const worldX = (x + 0.5) * map.tileSize;
-      const worldY = (y + 0.5) * map.tileSize;
-      miniCtx.fillStyle = pointVisible(worldX, worldY) ? '#314047' : '#0d1417';
+      const fogState = clientFogStateForTile(
+        exploration,
+        map,
+        snapshot?.visionSources ?? [],
+        x,
+        y,
+        Boolean(snapshot?.self.spectator),
+      );
+      miniCtx.fillStyle = fogState === FOG_VISIBLE
+        ? '#465b62'
+        : (fogState === FOG_EXPLORED ? '#182328' : '#030607');
       miniCtx.fillRect(
         x * map.tileSize * scaleX,
         y * map.tileSize * scaleY,
@@ -1200,6 +1324,29 @@ function drawMinimap() {
       Math.PI * 2,
     );
     miniCtx.fill();
+  }
+
+  const minimapIslands = snapshot?.self.spectator
+    ? CONTROL_ISLANDS
+    : [controlIslandForSlot(snapshot?.self.slot)].filter(Boolean);
+  for (const island of minimapIslands) {
+    const bounds = controlIslandWorldBounds(island);
+    if (!bounds) continue;
+    miniCtx.fillStyle = '#0a1215';
+    miniCtx.fillRect(
+      bounds.left * scaleX,
+      bounds.top * scaleY,
+      (bounds.right - bounds.left) * scaleX,
+      (bounds.bottom - bounds.top) * scaleY,
+    );
+    miniCtx.strokeStyle = island.slot === snapshot?.self.slot ? '#75d6d1' : '#49666b';
+    miniCtx.lineWidth = island.slot === snapshot?.self.slot ? 1.4 : 0.8;
+    miniCtx.strokeRect(
+      bounds.left * scaleX,
+      bounds.top * scaleY,
+      (bounds.right - bounds.left) * scaleX,
+      (bounds.bottom - bounds.top) * scaleY,
+    );
   }
 
   for (const pad of snapshot?.beacons ?? []) {
@@ -1238,15 +1385,21 @@ function drawMinimap() {
   if (Number.isFinite(snapshot?.self.homeX) && Number.isFinite(snapshot?.self.homeY)) {
     const x = snapshot.self.homeX * scaleX;
     const y = snapshot.self.homeY * scaleY;
-    miniCtx.strokeStyle = '#eaffff';
+    miniCtx.fillStyle = '#d9ff8d';
+    miniCtx.strokeStyle = '#091113';
     miniCtx.lineWidth = 1;
     miniCtx.beginPath();
-    miniCtx.arc(x, y, 6, 0, Math.PI * 2);
+    miniCtx.moveTo(x, y - 6);
+    miniCtx.lineTo(x + 6, y);
+    miniCtx.lineTo(x, y + 6);
+    miniCtx.lineTo(x - 6, y);
+    miniCtx.closePath();
+    miniCtx.fill();
     miniCtx.stroke();
   }
 
-  miniCtx.strokeStyle = '#e7fbff';
-  miniCtx.lineWidth = 1.4;
+  miniCtx.strokeStyle = '#f3fbff';
+  miniCtx.lineWidth = 2.2;
   miniCtx.strokeRect(
     camera.x * scaleX,
     camera.y * scaleY,
@@ -1381,10 +1534,8 @@ window.addEventListener('blur', () => {
 
 function panCameraFromMinimap(event) {
   if (!camera.initialized) return;
-  const rect = minimap.getBoundingClientRect();
-  const worldX = ((event.clientX - rect.left) / rect.width) * map.worldWidth;
-  const worldY = ((event.clientY - rect.top) / rect.height) * map.worldHeight;
-  centerCameraAtWorld(worldX, worldY);
+  const world = minimapEventToWorld(event, minimap, map);
+  centerCameraAtWorld(world.x, world.y);
   renderBattlefield();
   drawMinimap();
 }

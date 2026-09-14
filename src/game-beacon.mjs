@@ -1,28 +1,30 @@
 import {
-  findPath,
-  nearestWalkablePoint,
-  worldToTile,
-} from './game-core.mjs';
-import { infrastructureFrameForPlayer } from './game-infrastructure.mjs';
+  CONTROL_ISLAND_BUILDING_RADIUS,
+  CONTROL_ISLAND_INSET,
+  clampPointToControlIsland,
+  controlIslandForPlayer,
+  infrastructureFrameForPlayer,
+  pointInControlIsland,
+} from './game-infrastructure.mjs';
 import { unitOwnerSlot } from './game-ownership.mjs';
+import { assignMoveOrders } from './game-simulation.mjs';
 
 export const ZEALOT_HP = 9999;
 export const ZEALOT_SPEED = 140;
 export const ZEALOT_VISION_RADIUS = 96;
 export const BEACON_PAD_RADIUS = 17;
+export const BEACON_PAD_DISTANCE = 76;
 
-const PAD_DISTANCE = 64;
-const BEACON_CENTER_Y_OFFSET = -56;
-
+// Hollow 3x3 perimeter: eight pads, deliberately no center pad.
 export const BEACON_DIRECTIONS = Object.freeze([
-  Object.freeze({ key: 'N', dx: 0, dy: -1, targetZoneId: 2 }),
-  Object.freeze({ key: 'NE', dx: 1, dy: -1, targetZoneId: 3 }),
-  Object.freeze({ key: 'E', dx: 1, dy: 0, targetZoneId: 13 }),
-  Object.freeze({ key: 'SE', dx: 1, dy: 1, targetZoneId: 21 }),
-  Object.freeze({ key: 'S', dx: 0, dy: 1, targetZoneId: 20 }),
-  Object.freeze({ key: 'SW', dx: -1, dy: 1, targetZoneId: 19 }),
-  Object.freeze({ key: 'W', dx: -1, dy: 0, targetZoneId: 9 }),
-  Object.freeze({ key: 'NW', dx: -1, dy: -1, targetZoneId: 1 }),
+  Object.freeze({ key: 'NW', ox: -1, oy: -1, targetZoneId: 1 }),
+  Object.freeze({ key: 'N', ox: 0, oy: -1, targetZoneId: 2 }),
+  Object.freeze({ key: 'NE', ox: 1, oy: -1, targetZoneId: 3 }),
+  Object.freeze({ key: 'W', ox: -1, oy: 0, targetZoneId: 9 }),
+  Object.freeze({ key: 'E', ox: 1, oy: 0, targetZoneId: 13 }),
+  Object.freeze({ key: 'SW', ox: -1, oy: 1, targetZoneId: 19 }),
+  Object.freeze({ key: 'S', ox: 0, oy: 1, targetZoneId: 20 }),
+  Object.freeze({ key: 'SE', ox: 1, oy: 1, targetZoneId: 21 }),
 ]);
 
 function distanceSquared(a, b) {
@@ -33,11 +35,6 @@ function distanceSquared(a, b) {
 
 function beaconCenterForPlayer(player) {
   return infrastructureFrameForPlayer(player).center;
-}
-
-function normalizedDirection(direction) {
-  const length = Math.hypot(direction.dx, direction.dy) || 1;
-  return { x: direction.dx / length, y: direction.dy / length };
 }
 
 function createBeaconZealot(state, player, center) {
@@ -72,29 +69,20 @@ export function initializeBeaconSystem(state, map) {
   state.beaconCenters = new Map();
 
   for (const player of state.players ?? []) {
-    let center = state.beaconCenters.get(player.slot);
-    if (!center) {
-      const rawCenter = beaconCenterForPlayer(player);
-      center = nearestWalkablePoint(map, rawCenter.x, rawCenter.y, 8) ?? rawCenter;
-      state.beaconCenters.set(player.slot, center);
+    const center = beaconCenterForPlayer(player);
+    state.beaconCenters.set(player.slot, center);
 
-      for (const direction of BEACON_DIRECTIONS) {
-        const desired = {
-          x: center.x + direction.dx * PAD_DISTANCE,
-          y: center.y + direction.dy * PAD_DISTANCE,
-        };
-        const point = nearestWalkablePoint(map, desired.x, desired.y, 4) ?? desired;
-        state.beaconPads.push({
-          id: `beacon-${player.slot}-${direction.key}`,
-          ownerSlot: player.slot,
-          team: player.team,
-          direction: direction.key,
-          targetZoneId: direction.targetZoneId,
-          x: point.x,
-          y: point.y,
-          radius: BEACON_PAD_RADIUS,
-        });
-      }
+    for (const direction of BEACON_DIRECTIONS) {
+      state.beaconPads.push({
+        id: `beacon-${player.slot}-${direction.key}`,
+        ownerSlot: player.slot,
+        team: player.team,
+        direction: direction.key,
+        targetZoneId: direction.targetZoneId,
+        x: center.x + direction.ox * BEACON_PAD_DISTANCE,
+        y: center.y + direction.oy * BEACON_PAD_DISTANCE,
+        radius: BEACON_PAD_RADIUS,
+      });
     }
 
     const exists = state.units.some(
@@ -116,74 +104,59 @@ export function beaconPadsForPlayer(state, ownerSlot) {
   return (state.beaconPads ?? []).filter((pad) => pad.ownerSlot === ownerSlot);
 }
 
-export function issueTeamHydraRally(state, map, team, targetZoneId) {
+function issueHydraRally(state, map, hydras, targetZoneId, orderType) {
   const targetZone = map.zones.find((zone) => zone.id === targetZoneId);
-  if (!targetZone) return 0;
+  if (!targetZone || hydras.length === 0) return 0;
 
-  const hydras = state.units.filter(
-    (unit) => unit.type === 'hydra' && unit.team === team && unit.hp > 0,
-  );
-  const pathCache = new Map();
-  let ordered = 0;
-
+  const ids = new Set(hydras.map((hydra) => hydra.id));
+  const ordered = assignMoveOrders(map, state, ids, targetZone, { orderType });
   for (const hydra of hydras) {
-    const startTile = worldToTile(map, hydra.x, hydra.y);
-    const key = `${startTile.x},${startTile.y}`;
-    let path = pathCache.get(key);
-    if (!path) {
-      path = findPath(map, hydra, targetZone);
-      pathCache.set(key, path);
-    }
-    if (path.length === 0) continue;
-
-    hydra.path = path;
-    hydra.pathIndex = Math.min(1, path.length);
-    hydra.orderType = 'beacon-rally';
+    if (hydra.orderType !== orderType || hydra.path.length === 0) continue;
     hydra.rallyTargetZoneId = targetZoneId;
-    ordered += 1;
   }
-
   return ordered;
 }
 
-export function issuePlayerHydraRally(state, map, ownerSlot, targetZoneId) {
-  const targetZone = map.zones.find((zone) => zone.id === targetZoneId);
-  if (!targetZone) return 0;
+export function issueTeamHydraRally(state, map, team, targetZoneId) {
+  const hydras = state.units.filter(
+    (unit) => unit.type === 'hydra' && unit.team === team && unit.hp > 0,
+  );
+  return issueHydraRally(state, map, hydras, targetZoneId, 'beacon-rally');
+}
 
+export function issuePlayerHydraRally(state, map, ownerSlot, targetZoneId) {
   const hydras = state.units.filter(
     (unit) => unit.type === 'hydra'
       && unitOwnerSlot(unit) === ownerSlot
       && unit.hp > 0,
   );
-  const pathCache = new Map();
-  let ordered = 0;
-
-  for (const hydra of hydras) {
-    const startTile = worldToTile(map, hydra.x, hydra.y);
-    const key = `${startTile.x},${startTile.y}`;
-    let path = pathCache.get(key);
-    if (!path) {
-      path = findPath(map, hydra, targetZone);
-      pathCache.set(key, path);
-    }
-    if (path.length === 0) continue;
-
-    hydra.path = path;
-    hydra.pathIndex = Math.min(1, path.length);
-    hydra.orderType = 'beacon-rally';
-    hydra.rallyTargetZoneId = targetZoneId;
-    ordered += 1;
-  }
-
-  return ordered;
+  return issueHydraRally(state, map, hydras, targetZoneId, 'beacon-rally');
 }
 
-function sendZealotHome(state, map, zealot) {
+export function assignBeaconControllerMove(state, unit, target) {
+  if (!unit?.beaconController) return false;
+  const player = (state.players ?? []).find((candidate) => candidate.slot === unitOwnerSlot(unit));
+  const island = player ? controlIslandForPlayer(player) : null;
+  if (!island || !pointInControlIsland(island, target.x, target.y, CONTROL_ISLAND_INSET)) return false;
+  const clamped = clampPointToControlIsland(island, target, CONTROL_ISLAND_INSET);
+  const blocked = (state.upgradeBuildings ?? []).some(
+    (building) => building.hp > 0
+      && building.ownerSlot === player.slot
+      && distanceSquared(building, clamped) < (CONTROL_ISLAND_BUILDING_RADIUS + 18) ** 2,
+  );
+  if (blocked) return false;
+  unit.path = [clamped];
+  unit.pathIndex = 0;
+  unit.orderType = 'beacon-control';
+  unit.attackMoveEngaged = false;
+  return true;
+}
+
+function sendZealotHome(state, zealot) {
   const center = state.beaconCenters?.get(unitOwnerSlot(zealot));
   if (!center) return;
-  const path = findPath(map, zealot, center);
-  zealot.path = path;
-  zealot.pathIndex = Math.min(1, path.length);
+  zealot.path = [{ x: center.x, y: center.y }];
+  zealot.pathIndex = 0;
   zealot.orderType = 'beacon-return';
 }
 
@@ -205,7 +178,7 @@ export function stepBeaconSystem(state, map, deltaMs) {
     const ownerSlot = unitOwnerSlot(zealot);
     const ordered = issuePlayerHydraRally(state, map, ownerSlot, pad.targetZoneId);
     zealot.beaconCooldownMs = 650;
-    sendZealotHome(state, map, zealot);
+    sendZealotHome(state, zealot);
     events.push({
       type: 'beacon-rally',
       ownerSlot,

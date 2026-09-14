@@ -17,9 +17,11 @@ test('80-unit formation stays narrow enough for RTS choke approaches', () => {
   const columns = new Set(offsets.map((offset) => offset.x));
   const rows = new Set(offsets.map((offset) => offset.y));
 
-  assert.equal(columns.size, 7);
-  assert.equal(rows.size, 12);
-  assert.ok(Math.max(...offsets.map((offset) => Math.abs(offset.x))) <= 66);
+  assert.equal(columns.size, 5);
+  assert.equal(rows.size, 16);
+  assert.ok(Math.max(...offsets.map((offset) => Math.abs(offset.x))) <= 64);
+  const sortedColumns = [...columns].sort((a, b) => a - b);
+  assert.ok(sortedColumns.slice(1).every((value, index) => value - sortedColumns[index] >= 30));
 });
 
 test('hydras hold their firing position during the short attack animation', () => {

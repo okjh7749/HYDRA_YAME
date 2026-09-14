@@ -1,94 +1,68 @@
-import '/public/game-v3.mjs';
 import { initializeAiState, stepAi } from '/src/game-ai.mjs';
 import {
   evaluateMatchState,
   formatMatchTime,
   initializeMatchState,
-  matchTeamRows,
+  matchPlayerRows,
   stepMatchClock,
 } from '/src/game-match.mjs';
 import { unitOwnerSlot } from '/src/game-ownership.mjs';
 import { renderMatchOverlay, renderTeamBoard } from '/public/match-ui.mjs';
+import { setTextIfChanged } from '/src/rts-client-shared.mjs';
 
-const runtime = window.__hydraGame;
-if (!runtime) throw new Error('Hydra game runtime was not initialized');
+export function createClassicMatchRuntime({
+  map,
+  simulation,
+  selectedIds,
+  timerNode,
+  teamBoard,
+  matchOverlay,
+  teamColors,
+}) {
+  initializeMatchState(simulation, map, { countdownMs: 3000 });
+  initializeAiState(simulation);
 
-const { map, simulation, selectedIds } = runtime;
-const LOCAL_TEAM = simulation.localTeam;
-const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
-const gameCanvas = document.querySelector('#game');
-const upgradePanel = document.querySelector('#upgradePanel');
-const timerNode = document.querySelector('#matchTimer');
-const teamBoard = document.querySelector('#teamBoard');
-const matchOverlay = document.querySelector('#matchOverlay');
+  function commandsLocked() {
+    return simulation.match.phase !== 'running' || simulation.match.localMode !== 'playing';
+  }
 
-initializeMatchState(simulation, map, { countdownMs: 3000 });
-initializeAiState(simulation);
-
-function commandsLocked() {
-  return simulation.match.phase !== 'running' || simulation.match.localMode !== 'playing';
-}
-
-function blocksGameCommand(event) {
-  if (!commandsLocked()) return false;
-  if (event.target === gameCanvas) return true;
-  return Boolean(upgradePanel?.contains(event.target));
-}
-
-for (const eventName of ['pointerdown', 'pointerup', 'contextmenu', 'click']) {
-  window.addEventListener(eventName, (event) => {
-    if (!blocksGameCommand(event)) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  }, { capture: true });
-}
-
-function cleanupEliminatedArtifacts() {
-  const eliminated = new Set(
-    simulation.players
-      .filter((player) => player.status === 'eliminated')
-      .map((player) => player.slot),
-  );
-  if (simulation.match.phase === 'finished') {
-    for (const unit of simulation.units) {
-      if (unit.type === 'overlord' && unitOwnerSlot(unit) === simulation.localPlayerSlot) unit.hp = 0;
+  function cleanupEliminatedArtifacts() {
+    const eliminated = new Set(
+      simulation.players
+        .filter((player) => player.status === 'eliminated')
+        .map((player) => player.slot),
+    );
+    simulation.units = simulation.units.filter(
+      (unit) => unit.hp > 0 && !eliminated.has(unitOwnerSlot(unit)),
+    );
+    for (const building of simulation.upgradeBuildings ?? []) {
+      if (eliminated.has(building.ownerSlot)) building.hp = 0;
     }
+    if (simulation.match.localMode === 'spectating') selectedIds.clear();
   }
-  simulation.units = simulation.units.filter(
-    (unit) => unit.hp > 0 && !eliminated.has(unitOwnerSlot(unit)),
-  );
-  for (const building of simulation.upgradeBuildings ?? []) {
-    if (eliminated.has(building.ownerSlot)) building.hp = 0;
+
+  function renderUi() {
+    setTextIfChanged(timerNode, formatMatchTime(simulation.match.elapsedMs));
+    renderTeamBoard(
+      teamBoard,
+      matchPlayerRows(simulation, map),
+      teamColors,
+      simulation.localPlayerSlot,
+    );
+    renderMatchOverlay(matchOverlay, simulation.match);
   }
-  if (simulation.match.localMode === 'spectating') selectedIds.clear();
+
+  function step(deltaMs) {
+    const events = stepMatchClock(simulation, map, deltaMs);
+    if (simulation.match.phase === 'running') {
+      stepAi(simulation, map, deltaMs);
+      evaluateMatchState(simulation, map);
+    }
+    cleanupEliminatedArtifacts();
+    renderUi();
+    return events;
+  }
+
+  renderUi();
+  return { commandsLocked, renderUi, step };
 }
-
-function updateMatchUi() {
-  timerNode.textContent = formatMatchTime(simulation.match.elapsedMs);
-  renderTeamBoard(teamBoard, matchTeamRows(simulation, map), teamColors, LOCAL_TEAM);
-  renderMatchOverlay(matchOverlay, simulation.match);
-}
-
-let lastFrame = performance.now();
-
-function matchFrame(now) {
-  const deltaMs = Math.min(50, Math.max(0, now - lastFrame));
-  lastFrame = now;
-
-  const clockEvents = stepMatchClock(simulation, map, deltaMs);
-  if (clockEvents.some((event) => event.type === 'match-start')) {
-    selectedIds.clear();
-  }
-
-  if (simulation.match.phase === 'running') {
-    stepAi(simulation, map, deltaMs);
-    evaluateMatchState(simulation, map);
-  }
-
-  cleanupEliminatedArtifacts();
-  updateMatchUi();
-  requestAnimationFrame(matchFrame);
-}
-
-updateMatchUi();
-requestAnimationFrame(matchFrame);

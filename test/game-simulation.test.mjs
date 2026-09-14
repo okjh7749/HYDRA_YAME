@@ -25,6 +25,7 @@ import {
 test('creates the local overlord and gives the starting base live vision', () => {
   const map = buildClassicMap();
   const state = createSimulation(map, { localTeam: 0 });
+  initializeCombatState(state, map);
   const overlord = state.units.find((unit) => unit.type === 'overlord');
   const localHome = map.zones.find((zone) => zone.ownerSlot === 0);
   const allyHome = map.zones.find((zone) => zone.ownerSlot === 1);
@@ -70,7 +71,7 @@ test('solo local start exposes the home base, beacon controller, buildings, and 
   assert.equal(isPointVisible(state, map, state.localTeam, hydra.x, hydra.y), true);
 });
 
-test('every owned sunken produces one hydra every 500ms', () => {
+test('every owned sunken produces one hydra per configured production interval', () => {
   const map = buildClassicMap();
   const state = createSimulation(map, { localTeam: 0 });
 
@@ -183,7 +184,7 @@ test('dense armies collapse into a small conservative set of vision sources', ()
   }
 });
 
-test('large move orders share grouped paths instead of pathfinding once per unit', () => {
+test('large move orders keep independent paths so formation lanes do not collapse', () => {
   const map = buildClassicMap();
   const state = createSimulation(map, { localTeam: 0 });
   stepProduction(state, map, HYDRA_SPAWN_INTERVAL_MS * LARGE_ORDER_UNIT_THRESHOLD);
@@ -196,5 +197,5 @@ test('large move orders share grouped paths instead of pathfinding once per unit
   assert.equal(hydras.length, LARGE_ORDER_UNIT_THRESHOLD);
   assert.equal(assignMoveOrders(map, state, ids, target), hydras.length);
   const distinctPaths = new Set(hydras.map((unit) => unit.path));
-  assert.ok(distinctPaths.size < hydras.length);
+  assert.equal(distinctPaths.size, hydras.length);
 });

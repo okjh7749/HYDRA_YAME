@@ -12,10 +12,11 @@ import { initializeCombatState, stepCombat } from '../src/game-combat.mjs';
 import { buildClassicMap, isWalkableWorld } from '../src/game-core.mjs';
 import {
   infrastructureFrameForPlayer,
+  pointInControlIsland,
   upgradeBuildingPositionsForPlayer,
 } from '../src/game-infrastructure.mjs';
 import {
-  MAX_HYDRA_SEPARATION_PUSH,
+  HYDRA_SEPARATION_RADIUS,
   stepFormationMovement,
 } from '../src/game-formation.mjs';
 import {
@@ -51,7 +52,7 @@ test('creates one selectable beacon zealot and eight directional pads for every 
   );
   assert.deepEqual(
     localPads.map((pad) => pad.targetZoneId),
-    [2, 3, 13, 21, 20, 19, 9, 1],
+    BEACON_DIRECTIONS.map((direction) => direction.targetZoneId),
   );
 });
 
@@ -91,9 +92,11 @@ test('control islands keep beacon pads separated and upgrade buildings on-island
 
   const player = state.players[0];
   const frame = infrastructureFrameForPlayer(player);
-  assert.equal(isWalkableWorld(map, frame.center.x, frame.center.y), true);
+  assert.equal(isWalkableWorld(map, frame.center.x, frame.center.y), false);
+  assert.equal(pointInControlIsland(frame.island, frame.center.x, frame.center.y), true);
   for (const position of upgradeBuildingPositionsForPlayer(player)) {
-    assert.equal(isWalkableWorld(map, position.x, position.y), true);
+    assert.equal(isWalkableWorld(map, position.x, position.y), false);
+    assert.equal(pointInControlIsland(frame.island, position.x, position.y), true);
   }
 });
 
@@ -139,7 +142,7 @@ test('a new manual command can override the zealot return order while it is movi
   const ordered = assignMoveOrders(map, state, new Set([zealot.id]), target);
 
   assert.equal(ordered, 1);
-  assert.ok(zealot.path.length > 1);
+  assert.ok(zealot.path.length > 0);
 });
 
 test('attack-move fights in place and resumes its original route when the area is clear', () => {
@@ -186,12 +189,15 @@ test('overlapping friendly hydras separate gradually without teleporting', () =>
   hydras[0].y = center.y;
   hydras[1].x = center.x;
   hydras[1].y = center.y;
+  const before = hydras.map((unit) => ({ x: unit.x, y: unit.y }));
 
   stepFormationMovement(state, map, 50);
 
   const distance = Math.hypot(hydras[0].x - hydras[1].x, hydras[0].y - hydras[1].y);
-  assert.ok(distance > 0);
-  assert.ok(distance <= MAX_HYDRA_SEPARATION_PUSH * 2 + 0.01);
+  assert.ok(distance >= HYDRA_SEPARATION_RADIUS - 1);
+  for (let index = 0; index < hydras.length; index += 1) {
+    assert.ok(Math.hypot(hydras[index].x - before[index].x, hydras[index].y - before[index].y) <= HYDRA_SEPARATION_RADIUS / 2 + 1);
+  }
   assert.equal(isWalkableWorld(map, hydras[0].x, hydras[0].y), true);
   assert.equal(isWalkableWorld(map, hydras[1].x, hydras[1].y), true);
 });

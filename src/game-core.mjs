@@ -1,5 +1,3 @@
-import { CONTROL_ISLANDS } from './game-infrastructure.mjs';
-
 export const MAP_TILES = 64;
 export const TILE_SIZE = 32;
 export const CLASSIC_ZONE_SPAN = 384;
@@ -77,10 +75,6 @@ export function buildClassicMap() {
       ownerSlot,
       ownerTeam: ownerSlot === null ? null : Math.floor(ownerSlot / 2),
     });
-  }
-
-  for (const island of CONTROL_ISLANDS) {
-    fillRect(map, island.left, island.top, island.right, island.bottom);
   }
 
   return map;

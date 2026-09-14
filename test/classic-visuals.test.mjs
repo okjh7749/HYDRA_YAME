@@ -16,8 +16,9 @@ test('classic mode shares the detailed RTS terrain and unit renderer', async () 
   assert.match(classic, /drawRtsSunken/);
   assert.match(renderer, /function drawRtsUnit/);
   assert.match(classic, /const fogCanvas = document\.createElement\('canvas'\)/);
-  assert.match(classic, /fogCtx\.globalCompositeOperation = 'destination-out'/);
-  assert.match(classic, /fogCtx\.fillStyle = 'rgba\(0,0,0,1\)'/);
+  assert.match(classic, /clientFogStateForTile/);
+  assert.match(classic, /FOG_EXPLORED/);
+  assert.match(classic, /FOG_VISIBLE/);
   const fogStart = classic.indexOf('function drawFog()');
   const fogEnd = classic.indexOf('function drawSelectionBox()', fogStart);
   const fogBlock = classic.slice(fogStart, fogEnd);

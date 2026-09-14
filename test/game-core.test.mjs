@@ -12,7 +12,7 @@ import {
   nearestWalkablePoint,
   worldToTile,
 } from '../src/game-core.mjs';
-import { CONTROL_ISLANDS } from '../src/game-infrastructure.mjs';
+import { CONTROL_ISLANDS, pointInControlIsland } from '../src/game-infrastructure.mjs';
 
 test('builds the 64x64 classic battlefield with 21 capture zones', () => {
   const map = buildClassicMap();
@@ -65,17 +65,20 @@ test('finds a connected path without crossing the black void', () => {
   assert.equal(last.y, goal.y);
 });
 
-test('control islands are walkable but disconnected from the battlefield', () => {
+test('control islands use a dedicated non-walkable control layer', () => {
   const map = buildClassicMap();
   for (const island of CONTROL_ISLANDS) {
-    assert.equal(isWalkableWorld(map, island.x, island.y), true);
+    assert.equal(isWalkableWorld(map, island.x, island.y), false);
+    assert.equal(pointInControlIsland(island, island.x, island.y), true);
   }
 
   const island = CONTROL_ISLANDS.find((candidate) => candidate.slot === 0);
   const home = map.zones.find((zone) => zone.ownerSlot === 0);
   assert.ok(island);
   assert.ok(home);
-  assert.deepEqual(findPath(map, home, island), []);
+  const path = findPath(map, home, island);
+  assert.ok(path.length > 0);
+  assert.equal(path.some((point) => pointInControlIsland(island, point.x, point.y)), false);
 });
 
 test('pathfinding uses diagonal steps for diagonal targets', () => {

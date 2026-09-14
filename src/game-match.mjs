@@ -132,16 +132,32 @@ export function evaluateMatchState(state, map) {
 export function matchTeamRows(state, map) {
   return Array.from({ length: FORCE_COUNT }, (_, team) => {
     const players = (state.players ?? []).filter((player) => player.team === team);
+    const activePlayers = players.filter((player) => player.status !== 'eliminated');
     return {
       team,
       status: forceIsAlive(state, map, team) ? 'active' : 'eliminated',
       zones: teamSunkenCount(map, team),
       hydras: teamHydraCount(state, team),
-      minerals: players.reduce((sum, player) => sum + (player.minerals ?? 0), 0),
+      // Minerals are spendable only by live player slots. Empty/disconnected
+      // slots must not inflate the force economy shown in multiplayer.
+      minerals: activePlayers.reduce((sum, player) => sum + (player.minerals ?? 0), 0),
       kills: players.reduce((sum, player) => sum + (player.kills ?? 0), 0),
       captures: players.reduce((sum, player) => sum + (player.captures ?? 0), 0),
     };
   });
+}
+
+export function matchPlayerRows(state, map) {
+  return (state.players ?? []).map((player) => ({
+    slot: player.slot,
+    team: player.team,
+    status: player.status === 'eliminated' ? 'eliminated' : 'active',
+    zones: playerSunkenCount(map, player.slot),
+    hydras: playerHydraCount(state, player.slot),
+    minerals: player.minerals ?? 0,
+    kills: player.kills ?? 0,
+    captures: player.captures ?? 0,
+  }));
 }
 
 export function formatMatchTime(milliseconds) {

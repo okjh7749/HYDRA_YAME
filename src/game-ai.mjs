@@ -7,9 +7,11 @@ import {
 } from './game-combat.mjs';
 import { assignMoveOrders } from './game-simulation.mjs';
 import { playerHydraCount, unitOwnerSlot, zoneOwnerSlot } from './game-ownership.mjs';
+import { AI_GRACE_PERIOD_MS } from './game-rules.mjs';
 
 export const AI_MIN_ASSAULT_HYDRAS = 6;
 export const AI_DECISION_INTERVAL_MS = 3200;
+export const AI_OPENING_GRACE_MS = AI_GRACE_PERIOD_MS;
 
 function distanceSquared(a, b) {
   const dx = a.x - b.x;
@@ -71,12 +73,15 @@ export function chooseAiTarget(state, map, ownerSlot) {
 
 export function initializeAiState(state) {
   if (state.aiControllers) return state.aiControllers;
+  // Match-level grace is enforced in stepAi(). Do not add the same grace a
+  // second time to per-controller cooldowns; keep only the slot stagger below.
+  const openingDelayMs = state.match ? 0 : 900;
   state.aiControllers = (state.players ?? [])
     .filter((player) => player.slot !== state.localPlayerSlot)
     .map((player) => ({
       ownerSlot: player.slot,
       team: player.team,
-      decisionCooldownMs: 900 + player.slot * 225,
+      decisionCooldownMs: openingDelayMs + player.slot * 225,
       targetZoneId: null,
       decisions: 0,
     }));
@@ -96,6 +101,13 @@ function moveCaptureOverlord(state, map, ownerSlot, target) {
 
 export function stepAi(state, map, deltaMs) {
   const controllers = initializeAiState(state);
+  if (state.match && (state.match.elapsedMs ?? 0) < AI_OPENING_GRACE_MS) {
+    for (const player of state.players ?? []) {
+      if (player.slot === state.localPlayerSlot || player.status === 'eliminated') continue;
+      stepPlayerTriggerEconomy(state, map, player.slot, deltaMs);
+    }
+    return [];
+  }
   const events = [...stepAiCaptures(state, map, deltaMs)];
 
   for (const controller of controllers) {

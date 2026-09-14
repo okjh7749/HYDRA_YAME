@@ -11,6 +11,7 @@ import {
   nearestSelectableUnit,
   selectUnitsInRect,
   stepProduction,
+  HYDRA_SPAWN_INTERVAL_MS,
 } from '/src/game-simulation.mjs';
 import {
   SUNKEN_ARMOR,
@@ -49,6 +50,25 @@ import {
 } from '/public/rts-render-v3.mjs';
 import { minimapUnitRadius } from '/src/rts-feel.mjs';
 import { playCombatImpact, playUiCue, primeRtsAudio } from '/public/rts-audio.mjs';
+import { createClassicMatchRuntime } from '/public/match-runtime.mjs';
+import {
+  CONTROL_ISLANDS,
+  controlIslandForSlot,
+  controlIslandWorldBounds,
+} from '/src/game-infrastructure.mjs';
+import { playerHudSnapshot } from '/src/game-ui-semantics.mjs';
+import { CLASSIC_HYDRA_SPAWN_INTERVAL_MS } from '/src/game-rules.mjs';
+import {
+  FOG_EXPLORED,
+  FOG_UNEXPLORED,
+  FOG_VISIBLE,
+  clientFogStateForTile,
+  createClientFogMemory,
+  minimapEventToWorld,
+  setTextIfChanged,
+  touchTapShouldIssueMove,
+  updateClientFogMemory,
+} from '/src/rts-client-shared.mjs';
 
 const LOCAL_TEAM = 0;
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
@@ -68,13 +88,21 @@ const selectionTitleNode = document.querySelector('#selectionTitle');
 const upgradePanelNode = document.querySelector('#upgradePanel');
 const upgradeStatsNode = document.querySelector('#upgradeStats');
 const balanceNoteNode = document.querySelector('#balanceNote');
+const hudScopeNode = document.querySelector('#hudScopeLabel');
+const matchTimerNode = document.querySelector('#matchTimer');
+const teamBoardNode = document.querySelector('#teamBoard');
+const matchOverlayNode = document.querySelector('#matchOverlay');
+const selectionDetailsNode = document.querySelector('#selectionDetails');
 
 const ctx = gameCanvas.getContext('2d');
 const miniCtx = minimap.getContext('2d');
 const fogCanvas = document.createElement('canvas');
 const fogCtx = fogCanvas.getContext('2d');
 const map = buildClassicMap();
-const simulation = createSimulation(map, { localTeam: LOCAL_TEAM });
+const simulation = createSimulation(map, {
+  localTeam: LOCAL_TEAM,
+  productionIntervalMs: CLASSIC_HYDRA_SPAWN_INTERVAL_MS,
+});
 initializeCombatState(simulation, map);
 initializeUpgradeBuildings(simulation);
 initializeBeaconSystem(simulation, map);
@@ -88,8 +116,19 @@ const initialOverlord = simulation.units.find(
 );
 const selectedIds = new Set(initialOverlord ? [initialOverlord.id] : []);
 let selectedBuildingId = null;
+let selectedSunkenZoneId = null;
+const exploration = createClientFogMemory(map);
+const matchRuntime = createClassicMatchRuntime({
+  map,
+  simulation,
+  selectedIds,
+  timerNode: matchTimerNode,
+  teamBoard: teamBoardNode,
+  matchOverlay: matchOverlayNode,
+  teamColors,
+});
 
-zoneCountNode.textContent = String(map.zones.length);
+setTextIfChanged(zoneCountNode, map.zones.length);
 
 const camera = {
   x: 0,
@@ -102,6 +141,7 @@ const input = {
   pointerY: 0,
   inside: false,
   drag: null,
+  touchMoveMode: false,
 };
 
 let viewportWidth = 1;
@@ -111,6 +151,7 @@ let minimapAccumulator = 0;
 let visionSources = getVisionSources(simulation, map, LOCAL_TEAM);
 let transientStatus = '';
 let transientStatusMs = 0;
+let minimapPointerId = null;
 const soundedEffects = new WeakSet();
 
 function resizeCanvas() {
@@ -186,6 +227,27 @@ function updateCamera(deltaSeconds) {
 
 function drawTerrain() {
   drawIndustrialTerrain(ctx, map, camera, viewportWidth, viewportHeight, 1, isWalkableTile);
+}
+
+function drawControlIslands() {
+  for (const island of CONTROL_ISLANDS) {
+    const own = island.slot === simulation.localPlayerSlot;
+    const visible = own || simulation.match?.localMode === 'spectating' || pointVisible(island.x, island.y);
+    if (!visible) continue;
+    const bounds = controlIslandWorldBounds(island);
+    const x = bounds.left - camera.x;
+    const y = bounds.top - camera.y;
+    const width = bounds.right - bounds.left;
+    const height = bounds.bottom - bounds.top;
+    if (x > viewportWidth || y > viewportHeight || x + width < 0 || y + height < 0) continue;
+    ctx.save();
+    ctx.fillStyle = own ? 'rgba(22, 42, 47, 0.96)' : 'rgba(15, 28, 32, 0.9)';
+    ctx.strokeStyle = own ? '#75d6d1' : '#49666b';
+    ctx.lineWidth = own ? 2 : 1;
+    ctx.fillRect(x, y, width, height);
+    ctx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
+    ctx.restore();
+  }
 }
 
 function drawSunken(zone, x, y, color, visible) {
@@ -367,23 +429,29 @@ function drawCombatEffects() {
 }
 
 function drawFog() {
-  fogCtx.save();
-  fogCtx.globalCompositeOperation = 'source-over';
+  if (simulation.match?.localMode === 'spectating') return;
   fogCtx.clearRect(0, 0, fogCanvas.width, fogCanvas.height);
-  fogCtx.fillStyle = 'rgba(0, 0, 0, 0.92)';
-  fogCtx.fillRect(0, 0, viewportWidth, viewportHeight);
-  fogCtx.globalCompositeOperation = 'destination-out';
-  fogCtx.fillStyle = 'rgba(0,0,0,1)';
+  const tileSize = map.tileSize;
+  const left = Math.max(0, Math.floor(camera.x / tileSize));
+  const top = Math.max(0, Math.floor(camera.y / tileSize));
+  const right = Math.min(map.columns - 1, Math.ceil((camera.x + viewportWidth) / tileSize));
+  const bottom = Math.min(map.rows - 1, Math.ceil((camera.y + viewportHeight) / tileSize));
 
-  for (const source of visionSources) {
-    if (!visibleWorldPoint(source.x, source.y, source.radius)) continue;
-    const x = source.x - camera.x;
-    const y = source.y - camera.y;
-    fogCtx.beginPath();
-    fogCtx.arc(x, y, source.radius, 0, Math.PI * 2);
-    fogCtx.fill();
+  for (let tileY = top; tileY <= bottom; tileY += 1) {
+    for (let tileX = left; tileX <= right; tileX += 1) {
+      const fogState = clientFogStateForTile(exploration, map, visionSources, tileX, tileY);
+      if (fogState === FOG_VISIBLE) continue;
+      fogCtx.fillStyle = fogState === FOG_EXPLORED
+        ? 'rgba(0, 0, 0, 0.66)'
+        : 'rgba(0, 0, 0, 0.96)';
+      fogCtx.fillRect(
+        tileX * tileSize - camera.x,
+        tileY * tileSize - camera.y,
+        tileSize + 1,
+        tileSize + 1,
+      );
+    }
   }
-  fogCtx.restore();
 
   ctx.drawImage(fogCanvas, 0, 0, viewportWidth, viewportHeight);
 }
@@ -413,9 +481,17 @@ function drawMinimap() {
   for (let y = 0; y < map.rows; y += 1) {
     for (let x = 0; x < map.columns; x += 1) {
       if (!isWalkableTile(map, x, y)) continue;
-      const worldX = (x + 0.5) * map.tileSize;
-      const worldY = (y + 0.5) * map.tileSize;
-      miniCtx.fillStyle = pointVisible(worldX, worldY) ? '#39494f' : '#11191c';
+      const fogState = clientFogStateForTile(
+        exploration,
+        map,
+        visionSources,
+        x,
+        y,
+        simulation.match?.localMode === 'spectating',
+      );
+      miniCtx.fillStyle = fogState === FOG_VISIBLE
+        ? '#465b62'
+        : (fogState === FOG_EXPLORED ? '#182328' : '#030607');
       miniCtx.fillRect(
         x * map.tileSize * scaleX,
         y * map.tileSize * scaleY,
@@ -431,6 +507,27 @@ function drawMinimap() {
     miniCtx.beginPath();
     miniCtx.arc(zone.x * scaleX, zone.y * scaleY, zone.ownerTeam === null ? 2 : 4, 0, Math.PI * 2);
     miniCtx.fill();
+  }
+
+  for (const island of CONTROL_ISLANDS) {
+    const own = island.slot === simulation.localPlayerSlot;
+    if (!(own || simulation.match?.localMode === 'spectating' || pointVisible(island.x, island.y))) continue;
+    const bounds = controlIslandWorldBounds(island);
+    miniCtx.fillStyle = '#0a1215';
+    miniCtx.fillRect(
+      bounds.left * scaleX,
+      bounds.top * scaleY,
+      (bounds.right - bounds.left) * scaleX,
+      (bounds.bottom - bounds.top) * scaleY,
+    );
+    miniCtx.strokeStyle = own ? '#75d6d1' : '#49666b';
+    miniCtx.lineWidth = own ? 1.4 : 0.8;
+    miniCtx.strokeRect(
+      bounds.left * scaleX,
+      bounds.top * scaleY,
+      (bounds.right - bounds.left) * scaleX,
+      (bounds.bottom - bounds.top) * scaleY,
+    );
   }
 
   for (const pad of beaconPadsForPlayer(simulation, simulation.localPlayerSlot)) {
@@ -468,15 +565,23 @@ function drawMinimap() {
     miniCtx.fill();
   }
 
-  miniCtx.strokeStyle = '#eaffff';
+  const homeX = localHomeZone.x * scaleX;
+  const homeY = localHomeZone.y * scaleY;
+  miniCtx.fillStyle = '#d9ff8d';
+  miniCtx.strokeStyle = '#091113';
   miniCtx.lineWidth = 1;
   miniCtx.beginPath();
-  miniCtx.arc(localHomeZone.x * scaleX, localHomeZone.y * scaleY, 6, 0, Math.PI * 2);
+  miniCtx.moveTo(homeX, homeY - 6);
+  miniCtx.lineTo(homeX + 6, homeY);
+  miniCtx.lineTo(homeX, homeY + 6);
+  miniCtx.lineTo(homeX - 6, homeY);
+  miniCtx.closePath();
+  miniCtx.fill();
   miniCtx.stroke();
 
   const view = cameraRect(camera, viewportWidth, viewportHeight);
-  miniCtx.strokeStyle = '#e7fbff';
-  miniCtx.lineWidth = 1.4;
+  miniCtx.strokeStyle = '#f3fbff';
+  miniCtx.lineWidth = 2.2;
   miniCtx.strokeRect(
     view.x * scaleX,
     view.y * scaleY,
@@ -494,13 +599,25 @@ function pruneSelection() {
 
 function renderUpgradePanel(building) {
   if (!building) {
-    upgradePanelNode.hidden = true;
+    if (!upgradePanelNode.hidden) upgradePanelNode.hidden = true;
+    delete upgradePanelNode.dataset.signature;
     return;
   }
 
-  upgradePanelNode.hidden = false;
+  if (upgradePanelNode.hidden) upgradePanelNode.hidden = false;
   const player = getPlayerState(simulation, simulation.localPlayerSlot);
   const options = upgradeOptionsForBuilding(building);
+  const signature = [
+    building.id,
+    Math.ceil(building.hp),
+    player?.minerals ?? 0,
+    player?.upgrades.attack ?? 0,
+    player?.upgrades.defense ?? 0,
+    player?.upgrades.range ?? 0,
+    player?.upgrades.speed ?? 0,
+  ].join(':');
+  if (upgradePanelNode.dataset.signature === signature) return;
+  upgradePanelNode.dataset.signature = signature;
   const attack = player.upgrades.attack;
   const defense = player.upgrades.defense;
   const range = player.upgrades.range;
@@ -531,21 +648,21 @@ function renderUpgradePanel(building) {
 
 function updateHud() {
   pruneSelection();
-  const player = getPlayerState(simulation, simulation.localPlayerSlot);
-  const building = getUpgradeBuilding(simulation, selectedBuildingId);
-  mineralNode.textContent = String(player.minerals);
-  killNode.textContent = String(player.kills);
-  sunkenKillNode.textContent = String(player.sunkenKills);
-  ownedZoneNode.textContent = String(controlledZoneCount(map, simulation.localPlayerSlot));
-  hydraCountNode.textContent = String(playerHydraCount(simulation, simulation.localPlayerSlot));
-  selectionCountNode.textContent = String(selectedIds.size);
+  const hud = playerHudSnapshot(simulation, map, simulation.localPlayerSlot);
+  setTextIfChanged(hudScopeNode, hud.scopeLabel);
+  setTextIfChanged(mineralNode, hud.minerals);
+  setTextIfChanged(killNode, hud.kills);
+  setTextIfChanged(sunkenKillNode, hud.sunkenKills);
+  setTextIfChanged(ownedZoneNode, hud.zones);
+  setTextIfChanged(hydraCountNode, hud.hydras);
+  setTextIfChanged(selectionCountNode, selectedIds.size);
 
   if (transientStatusMs > 0) {
-    statusNode.textContent = transientStatus;
+    setTextIfChanged(statusNode, transientStatus);
     return;
   }
   if (selectedIds.size === 0) {
-    statusNode.textContent = '선택 없음 · 병력을 드래그해서 선택하세요.';
+    setTextIfChanged(statusNode, '선택 없음 · 병력을 드래그해서 선택하세요.');
     return;
   }
 
@@ -562,7 +679,7 @@ function updateHud() {
   if (hydras) parts.push(`Hydralisk × ${hydras}`);
   if (overlords) parts.push(`Overlord × ${overlords}`);
   if (zealots) parts.push(`Beacon Zealot × ${zealots}`);
-  statusNode.textContent = `${parts.join(' · ')} · 우클릭 이동 / 접전 시 자동 공격`;
+  setTextIfChanged(statusNode, `${parts.join(' · ')} · 우클릭/터치 이동 · 접전 시 자동 공격`);
 }
 
 function updateBuildingHud() {
@@ -576,7 +693,7 @@ function updateBuildingHud() {
       portraitLabelNode.textContent = 'ZL';
       selectionTitleNode.textContent = 'Beacon Zealot';
       if (transientStatusMs <= 0) {
-        statusNode.textContent = '8방향 비콘 칸으로 이동하면 모든 히드라가 대응 Zone으로 공격 이동합니다.';
+        statusNode.textContent = '비콘 칸으로 이동하면 내 P 슬롯 히드라만 대응 Zone으로 공격 이동합니다.';
       }
       return;
     }
@@ -598,8 +715,15 @@ function updateBuildingHud() {
 
 function render(forceMinimap = false) {
   visionSources = getVisionSources(simulation, map, LOCAL_TEAM);
+  updateClientFogMemory(
+    exploration,
+    map,
+    visionSources,
+    simulation.match?.localMode === 'spectating',
+  );
   ctx.save();
   drawTerrain();
+  drawControlIslands();
   drawFog();
   drawZones();
   drawClassicBeacons();
@@ -607,12 +731,20 @@ function render(forceMinimap = false) {
   drawUnits();
   drawCombatEffects();
   drawSelectionBox();
+  drawReadabilityOverlay();
   ctx.restore();
 
-  if (forceMinimap || minimapAccumulator >= 160) {
+  if (forceMinimap || minimapAccumulator >= 140) {
     drawMinimap();
     minimapAccumulator = 0;
   }
+}
+
+function touchHitSelectable(world) {
+  if (nearestUpgradeBuilding(simulation, simulation.localPlayerSlot, world, 34)) return true;
+  if (nearestSelectableUnit(simulation, simulation.localPlayerSlot, world, 28)) return true;
+  const sunken = nearestSelectableSunken(map, world, 24);
+  return Boolean(sunken && (sunken.ownerTeam === LOCAL_TEAM || pointVisible(sunken.x, sunken.y)));
 }
 
 function selectFromDrag() {
@@ -622,6 +754,7 @@ function selectFromDrag() {
   const endWorld = screenToWorld(drag.currentX, drag.currentY);
   const screenDistance = Math.hypot(drag.currentX - drag.startX, drag.currentY - drag.startY);
   selectedIds.clear();
+  selectedSunkenZoneId = null;
 
   if (screenDistance < 6) {
     const building = nearestUpgradeBuilding(simulation, simulation.localPlayerSlot, endWorld, 32);
@@ -650,6 +783,13 @@ function selectFromDrag() {
 }
 
 function issueMoveCommand(screenX, screenY) {
+  if (matchRuntime.commandsLocked()) {
+    transientStatus = simulation.match?.localMode === 'spectating'
+      ? '관전 중에는 유닛 명령을 내릴 수 없습니다.'
+      : '카운트다운이 끝나면 이동 명령을 내릴 수 있습니다.';
+    transientStatusMs = 1200;
+    return;
+  }
   if (selectedIds.size === 0) {
     transientStatus = '이동할 유닛을 먼저 선택하세요.';
     transientStatusMs = 1400;
@@ -671,6 +811,7 @@ function frame(now) {
   minimapAccumulator += deltaMs;
   transientStatusMs = Math.max(0, transientStatusMs - deltaMs);
 
+  matchRuntime.step(deltaMs);
   updateCamera(deltaSeconds);
   stepProduction(simulation, map, deltaMs);
   stepFormationMovement(simulation, map, deltaMs);
@@ -696,12 +837,14 @@ function frame(now) {
 
   updateHud();
   updateBuildingHud();
+  updateReadabilitySelectionUi();
   render();
   requestAnimationFrame(frame);
 }
 
 for (const button of upgradePanelNode.querySelectorAll('button[data-upgrade]')) {
   button.addEventListener('click', () => {
+    if (matchRuntime.commandsLocked()) return;
     const building = getUpgradeBuilding(simulation, selectedBuildingId);
     if (!building) return;
 
@@ -733,6 +876,25 @@ document.querySelector('#homeCameraButton')?.addEventListener('click', () => {
   render(true);
 });
 
+document.querySelector('#touchMoveButton')?.addEventListener('click', (event) => {
+  input.touchMoveMode = !input.touchMoveMode;
+  event.currentTarget.setAttribute('aria-pressed', String(input.touchMoveMode));
+  transientStatus = input.touchMoveMode
+    ? '이동 모드 · 전장에서 목적지를 탭하세요.'
+    : '이동 모드 해제';
+  transientStatusMs = 1000;
+});
+
+document.querySelector('#helpToggleButton')?.addEventListener('click', (event) => {
+  const panel = document.querySelector('#helpPanel');
+  if (!panel) return;
+  panel.hidden = !panel.hidden;
+  event.currentTarget.setAttribute('aria-expanded', String(!panel.hidden));
+});
+
+document.querySelector('#restartMatchButton')?.addEventListener('click', () => window.location.reload());
+document.querySelector('#backLobbyButton')?.addEventListener('click', () => { window.location.href = '/'; });
+
 window.addEventListener('resize', resizeCanvas);
 window.addEventListener('keydown', (event) => {
   if (event.code === 'KeyH') {
@@ -752,18 +914,53 @@ gameCanvas.addEventListener('pointerdown', (event) => {
   const rect = gameCanvas.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
-  input.drag = { startX: x, startY: y, currentX: x, currentY: y };
+  if (event.pointerType === 'touch' && input.touchMoveMode && selectedIds.size > 0) {
+    issueMoveCommand(x, y);
+    input.touchMoveMode = false;
+    const moveButton = document.querySelector('#touchMoveButton');
+    if (moveButton) moveButton.setAttribute('aria-pressed', 'false');
+    event.preventDefault();
+    return;
+  }
+  input.drag = {
+    startX: x,
+    startY: y,
+    currentX: x,
+    currentY: y,
+    lastX: x,
+    lastY: y,
+    pointerType: event.pointerType,
+    panning: false,
+  };
   gameCanvas.setPointerCapture(event.pointerId);
+  if (event.pointerType === 'touch') event.preventDefault();
 });
 
 gameCanvas.addEventListener('pointermove', (event) => {
   const rect = gameCanvas.getBoundingClientRect();
   input.pointerX = event.clientX - rect.left;
   input.pointerY = event.clientY - rect.top;
-  input.inside = true;
-  if (input.drag) {
-    input.drag.currentX = input.pointerX;
-    input.drag.currentY = input.pointerY;
+  input.inside = event.pointerType !== 'touch';
+  if (!input.drag) return;
+
+  input.drag.currentX = input.pointerX;
+  input.drag.currentY = input.pointerY;
+  if (input.drag.pointerType === 'touch') {
+    const distance = Math.hypot(
+      input.drag.currentX - input.drag.startX,
+      input.drag.currentY - input.drag.startY,
+    );
+    if (distance > 12) input.drag.panning = true;
+    if (input.drag.panning) {
+      camera.x += input.drag.lastX - input.drag.currentX;
+      camera.y += input.drag.lastY - input.drag.currentY;
+      clampCamera(camera, map, viewportWidth, viewportHeight);
+      input.drag.startX = input.drag.currentX;
+      input.drag.startY = input.drag.currentY;
+    }
+    input.drag.lastX = input.drag.currentX;
+    input.drag.lastY = input.drag.currentY;
+    event.preventDefault();
   }
 });
 
@@ -772,9 +969,24 @@ gameCanvas.addEventListener('pointerup', (event) => {
   const rect = gameCanvas.getBoundingClientRect();
   input.drag.currentX = event.clientX - rect.left;
   input.drag.currentY = event.clientY - rect.top;
-  selectFromDrag();
+  const wasPanning = Boolean(input.drag.panning);
+  const dragDistance = Math.hypot(
+    input.drag.currentX - input.drag.startX,
+    input.drag.currentY - input.drag.startY,
+  );
+  const world = screenToWorld(input.drag.currentX, input.drag.currentY);
+  if (!wasPanning && touchTapShouldIssueMove({
+    pointerType: event.pointerType,
+    selectedCount: selectedIds.size,
+    hitSelectable: touchHitSelectable(world),
+    dragDistance,
+  })) {
+    issueMoveCommand(input.drag.currentX, input.drag.currentY);
+  } else if (!wasPanning) {
+    selectFromDrag();
+  }
   input.drag = null;
-  gameCanvas.releasePointerCapture(event.pointerId);
+  if (gameCanvas.hasPointerCapture(event.pointerId)) gameCanvas.releasePointerCapture(event.pointerId);
 });
 
 gameCanvas.addEventListener('pointercancel', () => {
@@ -791,19 +1003,40 @@ gameCanvas.addEventListener('contextmenu', (event) => {
 });
 
 minimap.addEventListener('pointerdown', (event) => {
-  const rect = minimap.getBoundingClientRect();
-  const localX = ((event.clientX - rect.left) / rect.width) * minimap.width;
-  const localY = ((event.clientY - rect.top) / rect.height) * minimap.height;
-  camera.x = ((localX / minimap.width) * map.worldWidth) - viewportWidth / 2;
-  camera.y = ((localY / minimap.height) * map.worldHeight) - viewportHeight / 2;
+  if (event.button !== 0) return;
+  minimapPointerId = event.pointerId;
+  minimap.setPointerCapture(event.pointerId);
+  const world = minimapEventToWorld(event, minimap, map);
+  camera.x = world.x - viewportWidth / 2;
+  camera.y = world.y - viewportHeight / 2;
   clampCamera(camera, map, viewportWidth, viewportHeight);
   render(true);
 });
 
+minimap.addEventListener('pointermove', (event) => {
+  if (minimapPointerId !== event.pointerId || (event.buttons & 1) === 0) return;
+  const world = minimapEventToWorld(event, minimap, map);
+  camera.x = world.x - viewportWidth / 2;
+  camera.y = world.y - viewportHeight / 2;
+  clampCamera(camera, map, viewportWidth, viewportHeight);
+  render(true);
+});
+function releaseMinimapPointer(event) {
+  if (minimapPointerId !== event.pointerId) return;
+  if (minimap.hasPointerCapture(event.pointerId)) minimap.releasePointerCapture(event.pointerId);
+  minimapPointerId = null;
+}
+minimap.addEventListener('pointerup', releaseMinimapPointer);
+minimap.addEventListener('pointercancel', releaseMinimapPointer);
+
 resizeCanvas();
 centerCameraOnLocalHome();
 updateHud();
+updateBuildingHud();
+updateReadabilitySelectionUi();
 render(true);
+document.body.classList.remove('booting');
+document.body.setAttribute('aria-busy', 'false');
 requestAnimationFrame(frame);
 // selection combat readability milestone
 import {
@@ -818,9 +1051,6 @@ import {
   drawTargetReticle,
   renderDetailRows,
 } from '/public/combat-readability.mjs';
-const selectionDetailsNode = document.querySelector('#selectionDetails');
-let selectedSunkenZoneId = null;
-
 function teamLabel(team) {
   return team === LOCAL_TEAM ? 'Player 1' : `Team ${team + 1}`;
 }
@@ -879,7 +1109,7 @@ function sunkenDetailRows(zone) {
     ['Attack', info.attack],
     ['Armor', info.armor],
     ['Range', `${info.range}px`],
-    ['Production', `${production}% · 0.5s`],
+    ['Production', `${production}% · ${((simulation.productionIntervalMs ?? HYDRA_SPAWN_INTERVAL_MS) / 1000).toFixed(2)}s`],
     ['Zone', `Zone ${info.zoneId}`],
     ['Target', latestShot?.targetId ? `Unit #${latestShot.targetId}` : '없음'],
   ];
@@ -913,7 +1143,9 @@ function updateReadabilitySelectionUi() {
     renderDetailRows(selectionDetailsNode, sunkenDetailRows(sunken));
     if (transientStatusMs <= 0) {
       const cycle = simulation.spawnAccumulators.get(sunken.id) ?? 0;
-      const cyclePercent = Math.min(100, Math.round((cycle / 500) * 100));
+      const cyclePercent = Math.min(100, Math.round(
+        (cycle / (simulation.productionIntervalMs ?? HYDRA_SPAWN_INTERVAL_MS)) * 100,
+      ));
       statusNode.textContent = `성큰 HP ${Math.ceil(sunken.sunkenHp)} · 생산 주기 ${cyclePercent}% · 공격 범위 176px`;
     }
     return;
@@ -1041,11 +1273,42 @@ gameCanvas.addEventListener('pointerup', (event) => {
   updateReadabilitySelectionUi();
 });
 
-function readabilityFrame() {
-  updateReadabilitySelectionUi();
-  drawReadabilityOverlay();
-  requestAnimationFrame(readabilityFrame);
-}
-
-requestAnimationFrame(readabilityFrame);
 window.__hydraGame = { map, simulation, selectedIds, selectedBuildingId: () => selectedBuildingId };
+window.__hydraGameDebug = Object.freeze({
+  version: 1,
+  map,
+  simulation,
+  camera,
+  snapshot: () => ({
+    phase: simulation.match?.phase,
+    elapsedMs: simulation.match?.elapsedMs ?? 0,
+    localMode: simulation.match?.localMode,
+    selectedIds: [...selectedIds],
+    selectedBuildingId,
+    selectedSunkenZoneId,
+    hydras: playerHydraCount(simulation, simulation.localPlayerSlot),
+  }),
+  selectOwnHydras: () => {
+    selectedBuildingId = null;
+    selectedSunkenZoneId = null;
+    selectedIds.clear();
+    for (const unit of simulation.units) {
+      if (unit.ownerSlot === simulation.localPlayerSlot && unit.type === 'hydra' && unit.hp > 0) {
+        selectedIds.add(unit.id);
+      }
+    }
+    updateHud();
+    updateReadabilitySelectionUi();
+    return [...selectedIds];
+  },
+  moveSelectedTo: (x, y) => assignMoveOrders(
+    map,
+    simulation,
+    selectedIds,
+    { x: Number(x), y: Number(y) },
+  ),
+  centerHome: () => {
+    centerCameraOnLocalHome();
+    render(true);
+  },
+});

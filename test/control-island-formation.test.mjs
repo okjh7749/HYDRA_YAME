@@ -1,12 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { beaconPadsForPlayer, initializeBeaconSystem } from '../src/game-beacon.mjs';
+import {
+  BEACON_PAD_DISTANCE,
+  BEACON_PAD_RADIUS,
+  beaconPadsForPlayer,
+  initializeBeaconSystem,
+} from '../src/game-beacon.mjs';
 import { initializeCombatState } from '../src/game-combat.mjs';
 import { buildClassicMap } from '../src/game-core.mjs';
 import {
   CONTROL_ISLANDS,
+  CONTROL_ISLAND_BUILDING_RADIUS,
+  CONTROL_ISLAND_INSET,
   controlIslandForPlayer,
+  controlIslandsOverlap,
+  pointInControlIsland,
+  upgradeBuildingPositionsForPlayer,
 } from '../src/game-infrastructure.mjs';
 import {
   LARGE_ORDER_UNIT_THRESHOLD,
@@ -40,11 +50,59 @@ test('players use the nearest isolated control island with square beacon spacing
       .map((pad) => [pad.x - center.x, pad.y - center.y])
       .sort((a, b) => a[1] - b[1] || a[0] - b[0]);
 
+    const d = BEACON_PAD_DISTANCE;
     assert.deepEqual(offsets, [
-      [-64, -64], [0, -64], [64, -64],
-      [-64, 0], [64, 0],
-      [-64, 64], [0, 64], [64, 64],
+      [-d, -d], [0, -d], [d, -d],
+      [-d, 0], [d, 0],
+      [-d, d], [0, d], [d, d],
     ]);
+  }
+});
+
+test('control islands never overlap and their pads/buildings fit without collisions', () => {
+  const { state } = setup();
+
+  for (let i = 0; i < CONTROL_ISLANDS.length; i += 1) {
+    for (let j = i + 1; j < CONTROL_ISLANDS.length; j += 1) {
+      assert.equal(controlIslandsOverlap(CONTROL_ISLANDS[i], CONTROL_ISLANDS[j]), false);
+    }
+  }
+
+  for (const player of state.players) {
+    const island = controlIslandForPlayer(player);
+    const pads = beaconPadsForPlayer(state, player.slot);
+    const buildings = upgradeBuildingPositionsForPlayer(player);
+
+    for (const pad of pads) {
+      assert.equal(
+        pointInControlIsland(island, pad.x, pad.y, CONTROL_ISLAND_INSET + BEACON_PAD_RADIUS),
+        true,
+      );
+    }
+    for (const building of buildings) {
+      assert.equal(
+        pointInControlIsland(
+          island,
+          building.x,
+          building.y,
+          CONTROL_ISLAND_INSET + CONTROL_ISLAND_BUILDING_RADIUS,
+        ),
+        true,
+      );
+    }
+
+    assert.ok(
+      Math.hypot(buildings[0].x - buildings[1].x, buildings[0].y - buildings[1].y)
+        >= CONTROL_ISLAND_BUILDING_RADIUS * 2,
+    );
+    for (const building of buildings) {
+      for (const pad of pads) {
+        assert.ok(
+          Math.hypot(building.x - pad.x, building.y - pad.y)
+            >= CONTROL_ISLAND_BUILDING_RADIUS + BEACON_PAD_RADIUS,
+        );
+      }
+    }
   }
 });
 
@@ -67,7 +125,6 @@ test('large first move spreads hydras across several formation lanes', () => {
     const endpoint = unit.path.at(-1);
     return `${Math.round(endpoint.x)},${Math.round(endpoint.y)}`;
   }));
-  assert.ok(distinctPaths.size > 1);
-  assert.ok(distinctPaths.size < hydras.length);
+  assert.equal(distinctPaths.size, hydras.length);
   assert.ok(endpoints.size >= 6);
 });

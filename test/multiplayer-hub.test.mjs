@@ -9,6 +9,7 @@ import {
   createMultiplayerHub,
   recoverySnapshotIntervalForRoom,
 } from '../src/multiplayer-hub.mjs';
+import { HYDRA_SPAWN_INTERVAL_MS } from '../src/game-simulation.mjs';
 
 class FakePeer extends EventEmitter {
   constructor() {
@@ -84,7 +85,8 @@ test('hub sends reliable lockstep frames and supports bootstrap resync', () => {
 
   host.canSendRealtime = () => false;
   guest.canSendRealtime = () => false;
-  for (let tick = 0; tick < 70; tick += 1) hub.tick();
+  const advanceTicks = Math.ceil((3000 + HYDRA_SPAWN_INTERVAL_MS + 100) / 50);
+  for (let tick = 0; tick < advanceTicks; tick += 1) hub.tick();
 
   const room = hub.rooms.get(roomId);
   assert.equal(room.state.match.phase, 'running');

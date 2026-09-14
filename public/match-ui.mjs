@@ -1,9 +1,11 @@
-export function renderTeamBoard(container, rows, teamColors, localTeam) {
-  const signature = rows.map(
-    (row) => `${row.team}:${row.status}:${row.zones}:${row.hydras}:${row.minerals}:${row.kills}`,
-  ).join('|');
+export function renderTeamBoard(container, rows, teamColors, localScope) {
+  const playerScoped = rows.some((row) => Number.isInteger(row.slot));
+  const signature = `${playerScoped ? 'player' : 'force'}|${rows.map(
+    (row) => `${row.slot ?? row.team}:${row.team}:${row.status}:${row.zones}:${row.hydras}:${row.minerals}:${row.kills}`,
+  ).join('|')}`;
   if (container.dataset.signature === signature) return;
   container.dataset.signature = signature;
+  container.dataset.scope = playerScoped ? 'player-slot' : 'force';
   container.replaceChildren();
 
   for (const row of rows) {
@@ -13,11 +15,18 @@ export function renderTeamBoard(container, rows, teamColors, localTeam) {
     const badge = document.createElement('span');
     badge.className = 'team-badge';
     badge.style.background = teamColors[row.team] ?? '#788';
-    badge.textContent = String(row.team + 1);
+    badge.textContent = playerScoped ? `P${row.slot + 1}` : String(row.team + 1);
 
     const name = document.createElement('span');
     name.className = 'team-name';
-    name.textContent = row.team === localTeam ? 'YOU' : `AI ${row.team + 1}`;
+    if (playerScoped) {
+      const localTeam = Math.floor(localScope / 2);
+      name.textContent = row.slot === localScope
+        ? 'YOU'
+        : (row.team === localTeam ? 'ALLY' : `AI P${row.slot + 1}`);
+    } else {
+      name.textContent = row.team === localScope ? 'YOU' : `AI ${row.team + 1}`;
+    }
 
     const territory = document.createElement('span');
     territory.textContent = `Z ${row.zones}`;
@@ -57,11 +66,11 @@ export function renderMatchOverlay(container, match) {
     else title = 'DEFEAT';
     subtitle = match.winnerTeam === null
       ? 'NO SURVIVORS'
-      : `TEAM ${match.winnerTeam + 1} WINS`;
+      : `FORCE ${match.winnerTeam + 1} WINS · SIMULATION FROZEN`;
     mode = 'finished';
   } else if (match.localMode === 'spectating') {
     title = 'ELIMINATED';
-    subtitle = 'SPECTATING · FREE VISION';
+    subtitle = 'SPECTATING · FREE VISION · COMMANDS LOCKED';
     mode = 'spectating';
   } else {
     container.hidden = true;
@@ -72,4 +81,6 @@ export function renderMatchOverlay(container, match) {
   container.dataset.mode = mode;
   container.querySelector('.match-overlay-title').textContent = title;
   container.querySelector('.match-overlay-subtitle').textContent = subtitle;
+  const actions = container.querySelector('.match-overlay-actions');
+  if (actions) actions.hidden = mode === 'countdown';
 }

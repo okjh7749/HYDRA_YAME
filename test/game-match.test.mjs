@@ -102,4 +102,12 @@ test('team rows expose status, territory, army and economy for the scoreboard', 
     kills: 0,
     captures: 0,
   });
+
+  state.players[1].status = 'eliminated';
+  const unusedSlotZone = map.zones.find((zone) => zone.ownerSlot === 1);
+  setZoneOwner(unusedSlotZone, null);
+  unusedSlotZone.sunkenHp = 0;
+  const onePlayerTeam = matchTeamRows(state, map)[0];
+  assert.equal(onePlayerTeam.zones, 1);
+  assert.equal(onePlayerTeam.minerals, 1000);
 });

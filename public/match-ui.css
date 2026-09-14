@@ -3,12 +3,29 @@
   font-variant-numeric: tabular-nums;
 }
 
-.team-board {
+.team-board-wrap {
   position: absolute;
   top: 12px;
   right: 12px;
   z-index: 4;
-  width: 260px;
+  width: 310px;
+  pointer-events: none;
+}
+
+.team-board-label {
+  margin: 0 0 4px auto;
+  width: max-content;
+  padding: 3px 6px;
+  border: 1px solid rgba(117, 157, 164, 0.28);
+  background: rgba(5, 12, 15, 0.82);
+  color: #86afb5;
+  font: 700 9px ui-monospace, monospace;
+  letter-spacing: 0.12em;
+}
+
+.team-board {
+  position: static;
+  width: 310px;
   padding: 7px;
   border: 1px solid rgba(117, 157, 164, 0.38);
   background: rgba(5, 12, 15, 0.84);
@@ -18,7 +35,7 @@
 
 .team-row {
   display: grid;
-  grid-template-columns: 18px 42px repeat(4, 1fr);
+  grid-template-columns: 28px 54px repeat(4, 1fr);
   align-items: center;
   gap: 5px;
   min-height: 25px;
@@ -38,7 +55,7 @@
 .team-badge {
   display: grid;
   place-items: center;
-  width: 16px;
+  width: 26px;
   height: 16px;
   border-radius: 2px;
   color: #071013;
@@ -92,4 +109,27 @@
   color: #9fc3c2;
   font: 700 12px/1.3 ui-monospace, monospace;
   letter-spacing: 0.18em;
+}
+
+.match-overlay-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 18px;
+  pointer-events: auto;
+}
+
+.match-overlay-actions[hidden] {
+  display: none;
+}
+
+.match-overlay-actions button {
+  min-width: 110px;
+  min-height: 38px;
+  border: 1px solid #6e9ea1;
+  border-radius: 4px;
+  background: rgba(9, 25, 29, 0.94);
+  color: #efffff;
+  font: 700 12px ui-monospace, monospace;
+  cursor: pointer;
 }

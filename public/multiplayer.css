@@ -447,6 +447,8 @@ body.in-game {
   height: 100%;
   aspect-ratio: auto;
   cursor: crosshair;
+  touch-action: none;
+  user-select: none;
 }
 
 .hud-panel,
@@ -548,6 +550,7 @@ body.in-game {
   height: 190px;
   background: #010203;
   cursor: pointer;
+  touch-action: none;
 }
 
 .minimap-panel span {

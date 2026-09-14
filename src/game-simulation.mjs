@@ -1,6 +1,7 @@
 import {
   CLASSIC_ZONE_SPAN,
   findPath,
+  isWalkableWorld,
   nearestWalkablePoint,
 } from './game-core.mjs';
 import {
@@ -8,15 +9,33 @@ import {
   teamForSlot,
   unitOwnerSlot,
 } from './game-ownership.mjs';
+import {
+  CONTROL_ISLAND_BUILDING_RADIUS,
+  CONTROL_ISLAND_INSET,
+  clampPointToControlIsland,
+  controlIslandForSlot,
+  pointInControlIsland,
+} from './game-infrastructure.mjs';
+import {
+  HYDRA_MIN_SEPARATION,
+  HYDRA_SPAWN_INTERVAL_MS as RULE_HYDRA_SPAWN_INTERVAL_MS,
+  HYDRA_SPAWN_MIN_SPACING,
+  MAX_LOCAL_HYDRAS_PER_ZONE as RULE_MAX_LOCAL_HYDRAS_PER_ZONE,
+  UPGRADE_BUILDING_VISION_RADIUS,
+} from './game-rules.mjs';
+import {
+  pointVisibleFromSources,
+  pruneContainedVisionSources,
+} from './game-visibility.mjs';
 
-export const HYDRA_SPAWN_INTERVAL_MS = 500;
+export const HYDRA_SPAWN_INTERVAL_MS = RULE_HYDRA_SPAWN_INTERVAL_MS;
 export const HYDRA_HP = 40;
 export const HYDRA_SPEED = 112;
 export const HYDRA_SPEED_UPGRADE_MULTIPLIER = 1.25;
 export const HYDRA_VISION_RADIUS = 176;
 export const SUNKEN_VISION_RADIUS = 240;
 export const OVERLORD_VISION_RADIUS = 280;
-export const MAX_LOCAL_HYDRAS_PER_ZONE = 80;
+export const MAX_LOCAL_HYDRAS_PER_ZONE = RULE_MAX_LOCAL_HYDRAS_PER_ZONE;
 export const VISION_CLUSTER_SIZE = 160;
 export const LARGE_ORDER_UNIT_THRESHOLD = 32;
 export const PATH_GROUP_WORLD_SIZE = 64;
@@ -31,12 +50,33 @@ function createHydra(state, map, zone) {
   const sequence = state.spawnSequence.get(zone.id) ?? 0;
   state.spawnSequence.set(zone.id, sequence + 1);
 
-  const ring = Math.floor(sequence / 12);
-  const angle = (sequence % 12) * (Math.PI * 2 / 12) + ring * 0.31;
-  const radius = 34 + Math.min(2, ring) * 6;
-  const desiredX = zone.x + Math.cos(angle) * radius;
-  const desiredY = zone.y + Math.sin(angle) * radius;
-  const spawnPoint = nearestWalkablePoint(map, desiredX, desiredY, 8) ?? { x: zone.x, y: zone.y };
+  const sameOwnerHydras = state.units.filter(
+    (unit) => unit.type === 'hydra' && unitOwnerSlot(unit) === zone.ownerSlot && unit.hp > 0,
+  );
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  let spawnPoint = null;
+  let fallback = null;
+  for (let attempt = 0; attempt < 48; attempt += 1) {
+    const n = sequence + attempt;
+    const radius = Math.min(152, 34 + Math.sqrt(n + 1) * 13.5);
+    const angleCandidate = n * goldenAngle;
+    const candidate = nearestWalkablePoint(
+      map,
+      zone.x + Math.cos(angleCandidate) * radius,
+      zone.y + Math.sin(angleCandidate) * radius,
+      8,
+    );
+    if (!candidate) continue;
+    fallback ??= candidate;
+    if (sameOwnerHydras.every(
+      (unit) => Math.hypot(unit.x - candidate.x, unit.y - candidate.y) >= HYDRA_SPAWN_MIN_SPACING,
+    )) {
+      spawnPoint = candidate;
+      break;
+    }
+  }
+  spawnPoint ??= fallback ?? { x: zone.x, y: zone.y };
+  const angle = sequence * goldenAngle;
 
   const unit = {
     id: state.nextUnitId,
@@ -55,6 +95,7 @@ function createHydra(state, map, zone) {
     pathIndex: 0,
     facing: angle,
     sourceZoneId: zone.id,
+    separationBoostMs: 400,
   };
 
   state.nextUnitId += 1;
@@ -62,7 +103,14 @@ function createHydra(state, map, zone) {
   return unit;
 }
 
-export function createSimulation(map, { localTeam = 0, localPlayerSlot = localTeam * 2 } = {}) {
+export function createSimulation(
+  map,
+  {
+    localTeam = 0,
+    localPlayerSlot = localTeam * 2,
+    productionIntervalMs = HYDRA_SPAWN_INTERVAL_MS,
+  } = {},
+) {
   const localForce = teamForSlot(localPlayerSlot);
   const state = {
     localTeam: localForce,
@@ -71,6 +119,7 @@ export function createSimulation(map, { localTeam = 0, localPlayerSlot = localTe
     units: [],
     spawnAccumulators: new Map(),
     spawnSequence: new Map(),
+    productionIntervalMs,
   };
 
   const startZone = map.zones.find((zone) => zone.ownerSlot === localPlayerSlot) ?? map.zones[0];
@@ -102,37 +151,25 @@ export function countHydrasNearZone(state, zone) {
   let count = 0;
 
   for (const unit of state.units) {
-    if (unit.type !== 'hydra' || unitOwnerSlot(unit) !== zone.ownerSlot) continue;
+    if (unit.type !== 'hydra' || unit.hp <= 0 || unitOwnerSlot(unit) !== zone.ownerSlot) continue;
     if (Math.abs(unit.x - zone.x) <= halfSpan && Math.abs(unit.y - zone.y) <= halfSpan) count += 1;
   }
 
   return count;
 }
 
-function countMenNearZone(state, zone) {
-  const halfSpan = CLASSIC_ZONE_SPAN / 2;
-  let count = 0;
-  for (const unit of state.units) {
-    if (unit.hp <= 0) continue;
-    if (unitOwnerSlot(unit) !== zone.ownerSlot) continue;
-    if (Math.abs(unit.x - zone.x) <= halfSpan && Math.abs(unit.y - zone.y) <= halfSpan) {
-      count += 1;
-    }
-  }
-  return count;
-}
-
 export function stepProduction(state, map, deltaMs) {
   if (state.match && state.match.phase !== 'running') return [];
   const spawned = [];
+  const productionIntervalMs = state.productionIntervalMs ?? HYDRA_SPAWN_INTERVAL_MS;
 
   for (const zone of map.zones) {
     if (!Number.isInteger(zone.ownerSlot)) continue;
 
     let accumulator = (state.spawnAccumulators.get(zone.id) ?? 0) + deltaMs;
-    while (accumulator >= HYDRA_SPAWN_INTERVAL_MS) {
-      accumulator -= HYDRA_SPAWN_INTERVAL_MS;
-      if (countMenNearZone(state, zone) <= MAX_LOCAL_HYDRAS_PER_ZONE) {
+    while (accumulator >= productionIntervalMs) {
+      accumulator -= productionIntervalMs;
+      if (countHydrasNearZone(state, zone) < MAX_LOCAL_HYDRAS_PER_ZONE) {
         spawned.push(createHydra(state, map, zone));
       }
     }
@@ -167,9 +204,9 @@ export function stepMovement(state, deltaMs) {
   }
 }
 
-export function formationOffset(index, count, spacing = 22) {
+export function formationOffset(index, count, spacing = HYDRA_MIN_SEPARATION) {
   if (count <= 1) return { x: 0, y: 0 };
-  const width = count >= 24 ? 7 : Math.ceil(Math.sqrt(count));
+  const width = count >= 64 ? 5 : count >= 24 ? 7 : Math.ceil(Math.sqrt(count));
   const row = Math.floor(index / width);
   const column = index % width;
   const rows = Math.ceil(count / width);
@@ -188,23 +225,99 @@ function rotateOffset(offset, angle) {
   };
 }
 
+function nudgeOverlappingHydras(map, hydras) {
+  for (let pass = 0; pass < 2; pass += 1) {
+    for (let i = 0; i < hydras.length; i += 1) {
+      for (let j = i + 1; j < hydras.length; j += 1) {
+        const a = hydras[i];
+        const b = hydras[j];
+        let dx = a.x - b.x;
+        let dy = a.y - b.y;
+        let distance = Math.hypot(dx, dy);
+        if (distance >= HYDRA_MIN_SEPARATION * 0.72) continue;
+        if (distance < 0.001) {
+          const angle = ((a.id * 47 + b.id * 29) % 360) * Math.PI / 180;
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          distance = 1;
+        }
+        const push = Math.min(5, (HYDRA_MIN_SEPARATION - distance) * 0.3);
+        const px = (dx / distance) * push;
+        const py = (dy / distance) * push;
+        if (isWalkableWorld(map, a.x + px, a.y + py)) {
+          a.x += px;
+          a.y += py;
+        }
+        if (isWalkableWorld(map, b.x - px, b.y - py)) {
+          b.x -= px;
+          b.y -= py;
+        }
+      }
+    }
+  }
+}
+
+function applyLaneOffsetToPath(map, path, unit, offset, snappedTarget) {
+  if (!path?.length || unit.type !== 'hydra') return path;
+  const denominator = Math.max(1, path.length - 1);
+  const projected = path.map((point, index) => {
+    if (index === 0) return { x: unit.x, y: unit.y };
+    const progress = Math.min(1, (index / denominator) * 1.6);
+    const desired = {
+      x: point.x + offset.x * progress,
+      y: point.y + offset.y * progress,
+    };
+    return nearestWalkablePoint(map, desired.x, desired.y, 2) ?? point;
+  });
+  projected[projected.length - 1] = { x: snappedTarget.x, y: snappedTarget.y };
+  return projected;
+}
+
 export function assignMoveOrders(map, state, unitIds, targetWorld, { orderType = 'move' } = {}) {
-  const selected = state.units.filter((unit) => unitIds.has(unit.id));
+  const selected = state.units.filter((unit) => unitIds.has(unit.id) && unit.hp > 0);
   let ordered = 0;
+  if (selected.length === 0) return ordered;
+
+  const hydras = selected.filter((unit) => unit.type === 'hydra');
+  nudgeOverlappingHydras(map, hydras);
 
   const center = selected.reduce(
     (sum, unit) => ({ x: sum.x + unit.x, y: sum.y + unit.y }),
     { x: 0, y: 0 },
   );
-  const centerX = selected.length ? center.x / selected.length : targetWorld.x;
-  const centerY = selected.length ? center.y / selected.length : targetWorld.y;
+  const centerX = center.x / selected.length;
+  const centerY = center.y / selected.length;
   const heading = Math.atan2(targetWorld.y - centerY, targetWorld.x - centerX);
-  const relaxedFormation = selected.length >= LARGE_ORDER_UNIT_THRESHOLD;
-  const groupedPaths = new Map();
+  let hydraIndex = 0;
 
-  selected.forEach((unit, index) => {
+  for (const unit of selected) {
+    if (unit.beaconController) {
+      const ownerSlot = unitOwnerSlot(unit);
+      const island = controlIslandForSlot(ownerSlot);
+      if (!island || !pointInControlIsland(
+        island,
+        targetWorld.x,
+        targetWorld.y,
+        CONTROL_ISLAND_INSET,
+      )) continue;
+      const target = clampPointToControlIsland(island, targetWorld, CONTROL_ISLAND_INSET);
+      const blocked = (state.upgradeBuildings ?? []).some(
+        (building) => building.hp > 0
+          && building.ownerSlot === ownerSlot
+          && distanceSquared(building, target) < (CONTROL_ISLAND_BUILDING_RADIUS + 18) ** 2,
+      );
+      if (blocked) continue;
+      unit.path = [target];
+      unit.pathIndex = 0;
+      unit.orderType = 'beacon-control';
+      unit.attackMoveEngaged = false;
+      unit.attackMoveTarget = null;
+      ordered += 1;
+      continue;
+    }
+
     const baseOffset = unit.type === 'hydra'
-      ? formationOffset(index, selected.length)
+      ? formationOffset(hydraIndex++, hydras.length)
       : { x: 0, y: 0 };
     const offset = rotateOffset(baseOffset, heading + Math.PI / 2);
     const desiredTarget = {
@@ -212,21 +325,11 @@ export function assignMoveOrders(map, state, unitIds, targetWorld, { orderType =
       y: targetWorld.y + offset.y,
     };
     const snappedTarget = nearestWalkablePoint(map, desiredTarget.x, desiredTarget.y, 64);
-    if (!snappedTarget) return;
+    if (!snappedTarget) continue;
 
-    let path;
-    if (relaxedFormation) {
-      const groupKey = `${Math.floor(unit.x / PATH_GROUP_WORLD_SIZE)},${Math.floor(unit.y / PATH_GROUP_WORLD_SIZE)}`
-        + `>${Math.floor(snappedTarget.x / 32)},${Math.floor(snappedTarget.y / 32)}`;
-      path = groupedPaths.get(groupKey);
-      if (!path) {
-        path = findPath(map, { x: unit.x, y: unit.y }, snappedTarget);
-        if (path.length > 0) groupedPaths.set(groupKey, path);
-      }
-    } else {
-      path = findPath(map, { x: unit.x, y: unit.y }, snappedTarget);
-    }
-    if (!path || path.length === 0) return;
+    let path = findPath(map, { x: unit.x, y: unit.y }, snappedTarget);
+    if (!path || path.length === 0) continue;
+    path = applyLaneOffsetToPath(map, path, unit, offset, snappedTarget);
 
     unit.path = path;
     unit.pathIndex = Math.min(1, path.length);
@@ -234,8 +337,9 @@ export function assignMoveOrders(map, state, unitIds, targetWorld, { orderType =
     unit.attackMoveEngaged = false;
     unit.attackMoveTarget = orderType === 'attack-move'
       ? { x: targetWorld.x, y: targetWorld.y } : null;
+    if (unit.type === 'hydra') unit.separationBoostMs = 500;
     ordered += 1;
-  });
+  }
 
   return ordered;
 }
@@ -248,7 +352,7 @@ export function selectUnitsInRect(state, ownerSlot, rect) {
   const result = [];
 
   for (const unit of state.units) {
-    if (unitOwnerSlot(unit) !== ownerSlot) continue;
+    if (unit.hp <= 0 || unitOwnerSlot(unit) !== ownerSlot) continue;
     if (unit.x >= left && unit.x <= right && unit.y >= top && unit.y <= bottom) {
       result.push(unit.id);
     }
@@ -263,7 +367,7 @@ export function nearestSelectableUnit(state, ownerSlot, point, radius = 22) {
   let bestDistance = Number.POSITIVE_INFINITY;
 
   for (const unit of state.units) {
-    if (unitOwnerSlot(unit) !== ownerSlot) continue;
+    if (unit.hp <= 0 || unitOwnerSlot(unit) !== ownerSlot) continue;
     const distance = distanceSquared(unit, point);
     if (distance <= radiusSquared && distance < bestDistance) {
       best = unit;
@@ -274,88 +378,50 @@ export function nearestSelectableUnit(state, ownerSlot, point, radius = 22) {
   return best;
 }
 
-function clusterVisionSources(candidates) {
-  const buckets = new Map();
-  for (const source of candidates) {
-    const key = `${Math.floor(source.x / VISION_CLUSTER_SIZE)},${Math.floor(source.y / VISION_CLUSTER_SIZE)}`;
-    const bucket = buckets.get(key) ?? [];
-    bucket.push(source);
-    buckets.set(key, bucket);
-  }
-
-  return [...buckets.values()].map((bucket) => {
-    const center = bucket.reduce(
-      (sum, source) => ({ x: sum.x + source.x, y: sum.y + source.y }),
-      { x: 0, y: 0 },
-    );
-    const x = center.x / bucket.length;
-    const y = center.y / bucket.length;
-    let radius = 0;
-    for (const source of bucket) {
-      radius = Math.max(radius, Math.hypot(source.x - x, source.y - y) + source.radius);
-    }
-    return { x, y, radius };
-  });
-}
-
 export function getVisionSources(state, map, team) {
   if (team === state.localTeam && state.match?.localMode === 'spectating') {
     return [{
       x: map.worldWidth / 2,
       y: map.worldHeight / 2,
-      radius: Math.max(map.worldWidth, map.worldHeight) * 2,
+      radius: Math.hypot(map.worldWidth, map.worldHeight),
     }];
   }
   const sources = [];
 
   for (const unit of state.units) {
-    if (unit.team !== team) continue;
+    if (unit.team !== team || unit.hp <= 0) continue;
     sources.push({ x: unit.x, y: unit.y, radius: unit.visionRadius ?? HYDRA_VISION_RADIUS });
   }
 
   for (const zone of map.zones) {
-    if (zone.ownerTeam !== team) continue;
+    if (zone.ownerTeam !== team || (zone.sunkenHp ?? 0) <= 0) continue;
     sources.push({ x: zone.x, y: zone.y + 27, radius: SUNKEN_VISION_RADIUS });
   }
 
-  return clusterVisionSources(sources);
+  for (const building of state.upgradeBuildings ?? []) {
+    if (building.team !== team || (building.hp ?? 0) <= 0) continue;
+    sources.push({
+      x: building.x,
+      y: building.y,
+      radius: building.visionRadius ?? UPGRADE_BUILDING_VISION_RADIUS,
+    });
+  }
+
+  return pruneContainedVisionSources(sources);
 }
 
 export function isPointVisibleFromSources(sources, x, y) {
-  for (const source of sources ?? []) {
-    const dx = x - source.x;
-    const dy = y - source.y;
-    if (dx * dx + dy * dy <= source.radius * source.radius) return true;
-  }
-  return false;
+  return pointVisibleFromSources(sources, x, y);
 }
 
 export function isPointVisible(state, map, team, x, y) {
   return isPointVisibleFromSources(getVisionSources(state, map, team), x, y);
-  for (const unit of state.units) {
-    if (unit.team !== team) continue;
-    const radius = unit.visionRadius ?? HYDRA_VISION_RADIUS;
-    const dx = x - unit.x;
-    const dy = y - unit.y;
-    if (dx * dx + dy * dy <= radius * radius) return true;
-  }
-
-  for (const zone of map.zones) {
-    if (zone.ownerTeam !== team) continue;
-    const dx = x - zone.x;
-    const dy = y - (zone.y + 27);
-    if (dx * dx + dy * dy <= SUNKEN_VISION_RADIUS * SUNKEN_VISION_RADIUS) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 export function teamHydraCount(state, team) {
   let count = 0;
   for (const unit of state.units) {
-    if (unit.team === team && unit.type === 'hydra') count += 1;
+    if (unit.hp > 0 && unit.team === team && unit.type === 'hydra') count += 1;
   }
   return count;
 }

@@ -24,6 +24,10 @@ body {
   padding: 14px;
 }
 
+body.booting .shell {
+  visibility: hidden;
+}
+
 .hud {
   min-height: 54px;
   display: flex;
@@ -74,25 +78,43 @@ body {
   width: 100%;
   height: 100%;
   cursor: crosshair;
+  touch-action: none;
+  user-select: none;
 }
 
 .help {
   position: absolute;
   left: 12px;
   bottom: 12px;
+  z-index: 6;
+  max-width: min(720px, calc(100% - 24px));
+  border: 1px solid rgba(140, 190, 190, 0.26);
+  border-radius: 4px;
+  background: rgba(3, 10, 12, 0.8);
+  color: #b7c9ca;
+  font-size: 11px;
+}
+
+.help summary {
+  padding: 6px 9px;
+  cursor: pointer;
+  color: #d8eeee;
+  font-weight: 700;
+  user-select: none;
+}
+
+.help-items {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  pointer-events: none;
+  gap: 6px;
+  padding: 0 8px 8px;
 }
 
 .help span {
-  padding: 5px 8px;
-  border: 1px solid rgba(140, 190, 190, 0.26);
+  padding: 4px 7px;
+  border: 1px solid rgba(140, 190, 190, 0.18);
   border-radius: 3px;
-  background: rgba(3, 10, 12, 0.76);
-  color: #b7c9ca;
-  font-size: 11px;
+  background: rgba(7, 18, 20, 0.72);
 }
 
 .home-camera {
@@ -170,6 +192,7 @@ body {
   border: 1px solid #43565b;
   background: #000;
   image-rendering: pixelated;
+  touch-action: none;
 }
 
 .selection-copy {
@@ -231,6 +254,55 @@ body {
   line-height: 1.45;
 }
 
+.touch-controls {
+  display: none;
+  position: absolute;
+  left: 12px;
+  top: 54px;
+  z-index: 6;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.touch-controls button {
+  min-width: 42px;
+  min-height: 42px;
+  border: 1px solid #5f8e91;
+  border-radius: 5px;
+  background: rgba(7, 20, 23, 0.88);
+  color: #e9ffff;
+  font: 700 12px ui-monospace, monospace;
+  touch-action: manipulation;
+}
+
+.touch-controls #touchMoveMode[aria-pressed="true"] {
+  border-color: #d9ff8d;
+  color: #d9ff8d;
+  background: rgba(34, 63, 38, 0.92);
+}
+
+.touch-camera-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 42px);
+  grid-template-areas:
+    ". up ."
+    "left home right"
+    ". down .";
+  gap: 3px;
+}
+
+.touch-camera-pad [data-camera="up"] { grid-area: up; }
+.touch-camera-pad [data-camera="left"] { grid-area: left; }
+.touch-camera-pad [data-camera="home"] { grid-area: home; }
+.touch-camera-pad [data-camera="right"] { grid-area: right; }
+.touch-camera-pad [data-camera="down"] { grid-area: down; }
+
+@media (pointer: coarse) {
+  .touch-controls { display: flex; }
+  .home-camera { display: none; }
+  .help { bottom: 8px; }
+}
+
 @media (max-width: 700px) {
   .shell { padding: 6px; }
 
@@ -250,4 +322,47 @@ body {
   .viewport-wrap { height: 58svh; min-height: 420px; }
   .bottom-panel { grid-template-columns: 1fr; }
   .map-card #minimap { width: 100%; height: auto; }
+}
+
+.help-toggle {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 7;
+  padding: 6px 9px;
+  border: 1px solid rgba(140, 190, 190, 0.44);
+  border-radius: 3px;
+  background: rgba(3, 10, 12, 0.9);
+  color: #d7e8e9;
+  cursor: pointer;
+}
+
+.help[hidden] { display: none; }
+.help:not([hidden]) { bottom: 48px; padding: 8px; display: flex; flex-wrap: wrap; gap: 7px; }
+.help:not([hidden]) span { display: inline-block; }
+
+.viewport-actions {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 6;
+  display: flex;
+  gap: 7px;
+}
+
+.viewport-actions .home-camera { position: static; }
+.touch-move {
+  display: none;
+  padding: 7px 10px;
+  border: 1px solid #5f8e91;
+  border-radius: 3px;
+  background: rgba(7, 20, 23, 0.88);
+  color: #e9ffff;
+  font: 700 11px ui-monospace, monospace;
+}
+.touch-move[aria-pressed="true"] { border-color: #d9ff8d; color: #d9ff8d; }
+.stats .scope { margin-left: 0; margin-right: 2px; color: #8be8ff; }
+
+@media (pointer: coarse), (max-width: 900px) {
+  .touch-move { display: inline-block; }
 }

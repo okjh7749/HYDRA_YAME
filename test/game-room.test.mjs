@@ -18,6 +18,7 @@ import {
   tickRoom,
   visibleUnitPoolIndexesForClient,
 } from '../src/game-room.mjs';
+import { HYDRA_SPAWN_INTERVAL_MS } from '../src/game-simulation.mjs';
 
 function createTwoPlayerRoom() {
   const room = createRoom({ id: 'ABCD', hostId: 'host', hostName: 'Host' });
@@ -29,7 +30,8 @@ function createTwoPlayerRoom() {
 
 function startAndAdvance(room) {
   assert.equal(startRoom(room, 'host').ok, true);
-  for (let tick = 0; tick < 70; tick += 1) tickRoom(room, 50);
+  const ticks = Math.ceil((3000 + HYDRA_SPAWN_INTERVAL_MS + 100) / 50);
+  for (let tick = 0; tick < ticks; tick += 1) tickRoom(room, 50);
 }
 
 test('fills eight seats across four teams before using teammate slots', () => {
@@ -82,7 +84,7 @@ test('authoritative room advances at 50ms ticks and emits snapshots every 100ms'
   for (let tick = 0; tick < 58; tick += 1) tickRoom(room, 50);
   assert.equal(room.state.match.phase, 'running');
 
-  for (let tick = 0; tick < 10; tick += 1) tickRoom(room, 50);
+  for (let tick = 0; tick < Math.ceil(HYDRA_SPAWN_INTERVAL_MS / 50); tick += 1) tickRoom(room, 50);
   const hydraTeams = new Set(
     room.state.units.filter((unit) => unit.type === 'hydra').map((unit) => unit.team),
   );
@@ -296,7 +298,8 @@ test('server ownership validation does not let allied players co-control units',
   }
   for (const player of room.players) setRoomReady(room, player.id, true);
   assert.equal(startRoom(room, 'p0').ok, true);
-  for (let tick = 0; tick < 70; tick += 1) tickRoom(room, 50);
+  const advanceTicks = Math.ceil((3000 + HYDRA_SPAWN_INTERVAL_MS + 100) / 50);
+  for (let tick = 0; tick < advanceTicks; tick += 1) tickRoom(room, 50);
 
   const own = room.state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 0);
   const ally = room.state.units.find((unit) => unit.type === 'hydra' && unit.ownerSlot === 1);
