@@ -149,6 +149,31 @@ const PATH_DIRECTIONS = Object.freeze([
   [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2],
 ]);
 
+function segmentIsWalkable(map, start, end) {
+  const distance = Math.hypot(end.x - start.x, end.y - start.y);
+  const steps = Math.max(1, Math.ceil(distance / (map.tileSize / 4)));
+  for (let index = 1; index <= steps; index += 1) {
+    const t = index / steps;
+    const x = start.x + (end.x - start.x) * t;
+    const y = start.y + (end.y - start.y) * t;
+    if (!isWalkableWorld(map, x, y)) return false;
+  }
+  return true;
+}
+
+function smoothWorldPath(map, path) {
+  if (path.length <= 2) return path;
+  const smoothed = [path[0]];
+  let anchor = 0;
+  while (anchor < path.length - 1) {
+    let next = path.length - 1;
+    while (next > anchor + 1 && !segmentIsWalkable(map, path[anchor], path[next])) next -= 1;
+    smoothed.push(path[next]);
+    anchor = next;
+  }
+  return smoothed;
+}
+
 export function findPath(map, startWorld, targetWorld) {
   const start = worldToTile(map, startWorld.x, startWorld.y);
   const snappedTarget = nearestWalkablePoint(map, targetWorld.x, targetWorld.y, 64);
@@ -179,7 +204,7 @@ export function findPath(map, startWorld, targetWorld) {
       if (isWalkableWorld(map, targetWorld.x, targetWorld.y) && path.length > 0) {
         path[path.length - 1] = { x: targetWorld.x, y: targetWorld.y };
       }
-      return path;
+      return smoothWorldPath(map, path);
     }
 
     for (const [dx, dy, cost] of PATH_DIRECTIONS) {

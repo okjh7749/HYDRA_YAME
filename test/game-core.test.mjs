@@ -81,17 +81,16 @@ test('control islands use a dedicated non-walkable control layer', () => {
   assert.equal(path.some((point) => pointInControlIsland(island, point.x, point.y)), false);
 });
 
-test('pathfinding uses diagonal steps for diagonal targets', () => {
+test('pathfinding smooths open diagonal routes instead of exposing 8-direction tile steps', () => {
   const map = buildClassicMap();
-  const path = findPath(map, { x: 640, y: 640 }, { x: 800, y: 800 });
+  const start = { x: 640, y: 640 };
+  const goal = { x: 800, y: 800 };
+  const path = findPath(map, start, goal);
 
   assert.ok(path.length > 1);
-  assert.ok(path.length <= 7);
-  const diagonalSteps = path.slice(1).filter((point, index) => {
-    const previous = path[index];
-    return Math.abs(point.x - previous.x) > 1 && Math.abs(point.y - previous.y) > 1;
-  });
-  assert.ok(diagonalSteps.length >= 4);
+  assert.ok(path.length <= 3);
+  assert.deepEqual(path.at(-1), goal);
+  assert.equal(path.every((point) => isWalkableWorld(map, point.x, point.y)), true);
 });
 
 test('clamps camera movement to the 2048x2048 world bounds', () => {

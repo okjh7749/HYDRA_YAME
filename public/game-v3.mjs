@@ -71,6 +71,7 @@ import {
 } from '/src/rts-client-shared.mjs';
 
 const LOCAL_TEAM = 0;
+const DRAG_SELECTION_LIMIT = 24;
 const teamColors = ['#53e3b2', '#f0bc4a', '#e55a55', '#6da9ff'];
 
 const gameCanvas = document.querySelector('#game');
@@ -148,6 +149,8 @@ let viewportWidth = 1;
 let viewportHeight = 1;
 let lastFrame = performance.now();
 let minimapAccumulator = 0;
+let visionAccumulator = 100;
+let hudAccumulator = 100;
 let visionSources = getVisionSources(simulation, map, LOCAL_TEAM);
 let transientStatus = '';
 let transientStatusMs = 0;
@@ -201,7 +204,7 @@ function pointVisible(x, y) {
 }
 
 function updateCamera(deltaSeconds) {
-  const speed = 460;
+  const speed = 700;
   let dx = 0;
   let dy = 0;
 
@@ -210,7 +213,7 @@ function updateCamera(deltaSeconds) {
   if (input.keys.has('KeyW') || input.keys.has('ArrowUp')) dy -= 1;
   if (input.keys.has('KeyS') || input.keys.has('ArrowDown')) dy += 1;
 
-  const edge = 24;
+  const edge = 44;
   if (input.inside && !input.drag) {
     if (input.pointerX < edge) dx -= 1;
     if (input.pointerX > viewportWidth - edge) dx += 1;
@@ -737,13 +740,16 @@ function updateBuildingHud() {
 }
 
 function render(forceMinimap = false) {
-  visionSources = getVisionSources(simulation, map, LOCAL_TEAM);
-  updateClientFogMemory(
-    exploration,
-    map,
-    visionSources,
-    simulation.match?.localMode === 'spectating',
-  );
+  if (forceMinimap || visionAccumulator >= 80) {
+    visionSources = getVisionSources(simulation, map, LOCAL_TEAM);
+    updateClientFogMemory(
+      exploration,
+      map,
+      visionSources,
+      simulation.match?.localMode === 'spectating',
+    );
+    visionAccumulator = 0;
+  }
   ctx.save();
   drawTerrain();
   drawControlIslands();
@@ -800,7 +806,7 @@ function selectFromDrag() {
       y1: startWorld.y,
       x2: endWorld.x,
       y2: endWorld.y,
-    })) selectedIds.add(id);
+    }).slice(0, DRAG_SELECTION_LIMIT)) selectedIds.add(id);
   }
   if (selectedIds.size > 0) playUiCue('select');
   updateHud();
@@ -834,6 +840,8 @@ function frame(now) {
   const deltaSeconds = deltaMs / 1000;
   lastFrame = now;
   minimapAccumulator += deltaMs;
+  visionAccumulator += deltaMs;
+  hudAccumulator += deltaMs;
   transientStatusMs = Math.max(0, transientStatusMs - deltaMs);
   if (moveMarker) {
     moveMarker.ttlMs -= deltaMs;
@@ -864,9 +872,12 @@ function frame(now) {
     transientStatusMs = 2200;
   }
 
-  updateHud();
-  updateBuildingHud();
-  updateReadabilitySelectionUi();
+  if (hudAccumulator >= 100) {
+    updateHud();
+    updateBuildingHud();
+    updateReadabilitySelectionUi();
+    hudAccumulator = 0;
+  }
   render();
   requestAnimationFrame(frame);
 }
@@ -940,11 +951,13 @@ function selectOwnedUnitType(type) {
   selectedBuildingId = null;
   selectedSunkenZoneId = null;
   selectedIds.clear();
-  for (const unit of simulation.units) {
-    if (unit.hp > 0 && unit.ownerSlot === simulation.localPlayerSlot && unit.type === type) {
-      selectedIds.add(unit.id);
-    }
-  }
+  const focusX = camera.x + viewportWidth / 2;
+  const focusY = camera.y + viewportHeight / 2;
+  const candidates = simulation.units
+    .filter((unit) => unit.hp > 0 && unit.ownerSlot === simulation.localPlayerSlot && unit.type === type)
+    .sort((a, b) => ((a.x - focusX) ** 2 + (a.y - focusY) ** 2) - ((b.x - focusX) ** 2 + (b.y - focusY) ** 2));
+  const limit = type === 'hydra' ? DRAG_SELECTION_LIMIT : candidates.length;
+  for (const unit of candidates.slice(0, limit)) selectedIds.add(unit.id);
   if (selectedIds.size > 0) playUiCue('select');
   transientStatus = selectedIds.size > 0
     ? `${type === 'hydra' ? '히드라' : type === 'overlord' ? '오버로드' : '비콘 질럿'} ${selectedIds.size}기 빠른 선택`
@@ -1124,6 +1137,11 @@ gameCanvas.addEventListener('pointercancel', () => {
 gameCanvas.addEventListener('mouseleave', () => {
   input.inside = false;
 });
+document.addEventListener('contextmenu', (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+}, { capture: true });
+
 gameCanvas.addEventListener('contextmenu', (event) => {
   primeRtsAudio();
   event.preventDefault();

@@ -11,12 +11,41 @@ function distanceSquared(a, b) {
 export function pruneContainedVisionSources(sources) {
   const candidates = (sources ?? []).filter(
     (source) => source && Number.isFinite(source.x) && Number.isFinite(source.y) && source.radius > 0,
-  );
-  return candidates.filter((source, index) => !candidates.some((other, otherIndex) => {
-    if (otherIndex === index || other.radius < source.radius) return false;
-    const distance = Math.sqrt(distanceSquared(source, other));
-    return distance + source.radius <= other.radius;
-  }));
+  ).map((source, index) => ({ source, index }));
+
+  const groups = new Map();
+  for (const entry of candidates) {
+    const bucket = groups.get(entry.source.radius) ?? [];
+    bucket.push(entry);
+    groups.set(entry.source.radius, bucket);
+  }
+
+  const radii = [...groups.keys()].sort((a, b) => b - a);
+  const largerSources = [];
+  const kept = [];
+
+  for (const radius of radii) {
+    const seenExact = new Set();
+    const keptInGroup = [];
+    for (const entry of groups.get(radius)) {
+      const { source } = entry;
+      const exactKey = `${source.x}:${source.y}`;
+      if (seenExact.has(exactKey)) continue;
+      seenExact.add(exactKey);
+
+      const contained = largerSources.some((other) => {
+        const margin = other.radius - source.radius;
+        return margin >= 0 && distanceSquared(source, other) <= margin * margin;
+      });
+      if (contained) continue;
+      kept.push(entry);
+      keptInGroup.push(source);
+    }
+    largerSources.push(...keptInGroup);
+  }
+
+  kept.sort((a, b) => a.index - b.index);
+  return kept.map((entry) => entry.source);
 }
 
 export function pointVisibleFromSources(sources, x, y) {

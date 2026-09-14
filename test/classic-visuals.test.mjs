@@ -46,4 +46,8 @@ test('classic controls expose fast RTS selection and responsive attack-move feed
   assert.match(classic, /event\.code === 'Space'/);
   assert.match(classic, /orderType: 'attack-move'/);
   assert.match(classic, /function drawMoveMarker\(\)/);
+  assert.match(classic, /DRAG_SELECTION_LIMIT = 24/);
+  assert.match(classic, /const speed = 700/);
+  assert.match(classic, /const edge = 44/);
+  assert.match(classic, /document\.addEventListener\('contextmenu'/);
 });
