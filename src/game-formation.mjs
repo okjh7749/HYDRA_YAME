@@ -113,7 +113,7 @@ function pathVelocity(unit, deltaSeconds) {
     return { x: 0, y: 0 };
   }
   if (unit.type === 'hydra' && (unit.attackFlashMs ?? 0) > 0) return { x: 0, y: 0 };
-  if (unit.type === 'hydra' && unit.orderType === 'attack-move' && unit.attackMoveEngaged) {
+  if (unit.type === 'hydra' && unit.attackMoveEngaged) {
     return { x: 0, y: 0 };
   }
 
@@ -185,7 +185,7 @@ export function stepFormationMovement(state, map, deltaMs) {
     if (
       unit.type === 'hydra'
       && unit.hp > 0
-      && !(unit.orderType === 'attack-move' && unit.attackMoveEngaged)
+      && !unit.attackMoveEngaged
     ) {
       const maxPush = Math.min(MAX_HYDRA_SEPARATION_PUSH, HYDRA_SEPARATION_SPEED * deltaSeconds);
       const separation = separationVector(unit, spatialHash, maxPush);

@@ -136,19 +136,19 @@ test('button state disables upgrades that are unaffordable or already maxed', ()
   assert.equal(maxed.maxed, true);
 });
 
-test('classic damage formulas create the intended sunken-to-hydra crossover threshold', () => {
+test('classic damage formulas make early upgrades immediately meaningful', () => {
   const { state } = setup();
   const player = getPlayerState(state, 0);
 
-  player.upgrades.defense = 160;
+  player.upgrades.defense = 5;
   assert.equal(calculateSunkenDamage(state, 0), 40);
-  player.upgrades.defense = 161;
+  player.upgrades.defense = 6;
   assert.equal(calculateSunkenDamage(state, 0), 39);
 
-  player.upgrades.attack = 45;
+  player.upgrades.attack = 5;
   assert.equal(calculateHydraDamage(state, 0, SUNKEN_ARMOR), 1);
-  player.upgrades.attack = 50;
+  player.upgrades.attack = 10;
   assert.equal(calculateHydraDamage(state, 0, SUNKEN_ARMOR), 5);
-  player.upgrades.attack = 100;
-  assert.equal(calculateHydraDamage(state, 0, SUNKEN_ARMOR), 55);
+  player.upgrades.attack = 20;
+  assert.equal(calculateHydraDamage(state, 0, SUNKEN_ARMOR), 15);
 });

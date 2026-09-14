@@ -93,8 +93,8 @@ test('exposes selected sunken health, attack, armor, range and production interv
   assert.equal(info.kind, 'sunken');
   assert.equal(info.zoneId, 1);
   assert.equal(info.hp, 9999);
-  assert.equal(info.attack, 200);
-  assert.equal(info.armor, 50);
+  assert.equal(info.attack, 45);
+  assert.equal(info.armor, 10);
   assert.equal(info.range, 176);
   assert.equal(info.productionIntervalMs, 500);
 });

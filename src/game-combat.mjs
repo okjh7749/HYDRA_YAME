@@ -18,12 +18,12 @@ import { SpatialGrid } from './spatial-grid.mjs';
 
 export const HYDRA_BASE_DAMAGE = 5;
 export const HYDRA_ATTACK_RANGE = 96;
-export const HYDRA_ATTACK_COOLDOWN_MS = 700;
+export const HYDRA_ATTACK_COOLDOWN_MS = 620;
 export const HYDRA_KILL_REWARD = 5;
 
 export const SUNKEN_HP = 9999;
-export const SUNKEN_ARMOR = 50;
-export const SUNKEN_DAMAGE = 200;
+export const SUNKEN_ARMOR = 10;
+export const SUNKEN_DAMAGE = 45;
 export const SUNKEN_ATTACK_RANGE = 176;
 export const SUNKEN_ATTACK_COOLDOWN_MS = 900;
 export const SUNKEN_KILL_REWARD = 150;
@@ -342,7 +342,7 @@ export function stepCombat(state, map, deltaMs) {
     const enemySunken = lockedTarget?.kind === 'sunken'
       ? lockedTarget.value
       : (lockedTarget || enemyUnit ? null : nearestEnemySunken(map, unit, range, sunkenGrid));
-    unit.attackMoveEngaged = unit.orderType === 'attack-move'
+    unit.attackMoveEngaged = ['attack-move', 'beacon-rally', 'ai-assault'].includes(unit.orderType)
       && Boolean(enemyUnit || enemySunken);
     if (unit.attackCooldownMs > 0) continue;
 

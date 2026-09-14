@@ -152,6 +152,7 @@ let visionSources = getVisionSources(simulation, map, LOCAL_TEAM);
 let transientStatus = '';
 let transientStatusMs = 0;
 let minimapPointerId = null;
+let moveMarker = null;
 const soundedEffects = new WeakSet();
 
 function resizeCanvas() {
@@ -469,6 +470,28 @@ function drawSelectionBox() {
   ctx.strokeRect(left + 0.5, top + 0.5, width, height);
 }
 
+function drawMoveMarker() {
+  if (!moveMarker || moveMarker.ttlMs <= 0) return;
+  const x = moveMarker.x - camera.x;
+  const y = moveMarker.y - camera.y;
+  const progress = 1 - Math.max(0, moveMarker.ttlMs) / 620;
+  const radius = 8 + progress * 12;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, 1 - progress);
+  ctx.strokeStyle = '#d9ff8d';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x - 5, y);
+  ctx.lineTo(x + 5, y);
+  ctx.moveTo(x, y - 5);
+  ctx.lineTo(x, y + 5);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawMinimap() {
   const width = minimap.width;
   const height = minimap.height;
@@ -628,7 +651,7 @@ function renderUpgradePanel(building) {
   const sunkenDamage = calculateSunkenDamage(simulation, simulation.localPlayerSlot);
   const hydraVsSunken = calculateHydraDamage(simulation, simulation.localPlayerSlot, SUNKEN_ARMOR);
   const attackRange = calculateHydraAttackRange(simulation, simulation.localPlayerSlot);
-  balanceNoteNode.textContent = `현재 성큰→히드라 ${sunkenDamage} 피해 · 히드라→성큰 ${hydraVsSunken} 피해 · 사거리 ${attackRange}px · 방어 +161부터 성큰 한 방을 생존합니다.`;
+  balanceNoteNode.textContent = `현재 성큰→히드라 ${sunkenDamage} 피해 · 히드라→성큰 ${hydraVsSunken} 피해 · 사거리 ${attackRange}px · 공격/방어 업그레이드 효과가 전투에 즉시 반영됩니다.`;
 
   for (const button of upgradePanelNode.querySelectorAll('button[data-upgrade]')) {
     const key = button.dataset.upgrade;
@@ -732,6 +755,7 @@ function render(forceMinimap = false) {
   drawCombatEffects();
   drawSelectionBox();
   drawReadabilityOverlay();
+  drawMoveMarker();
   ctx.restore();
 
   if (forceMinimap || minimapAccumulator >= 140) {
@@ -796,7 +820,8 @@ function issueMoveCommand(screenX, screenY) {
     return;
   }
   const target = screenToWorld(screenX, screenY);
-  const ordered = assignMoveOrders(map, simulation, selectedIds, target);
+  const ordered = assignMoveOrders(map, simulation, selectedIds, target, { orderType: 'attack-move' });
+  if (ordered > 0) moveMarker = { x: target.x, y: target.y, ttlMs: 620 };
   if (ordered > 0) playUiCue('move');
   transientStatus = ordered > 0
     ? `${ordered}개 유닛 이동 명령 · 적과 접촉하면 자동 공격합니다.`
@@ -810,6 +835,10 @@ function frame(now) {
   lastFrame = now;
   minimapAccumulator += deltaMs;
   transientStatusMs = Math.max(0, transientStatusMs - deltaMs);
+  if (moveMarker) {
+    moveMarker.ttlMs -= deltaMs;
+    if (moveMarker.ttlMs <= 0) moveMarker = null;
+  }
 
   matchRuntime.step(deltaMs);
   updateCamera(deltaSeconds);
@@ -843,17 +872,29 @@ function frame(now) {
 }
 
 for (const button of upgradePanelNode.querySelectorAll('button[data-upgrade]')) {
-  button.addEventListener('click', () => {
+  button.addEventListener('click', (event) => {
     if (matchRuntime.commandsLocked()) return;
     const building = getUpgradeBuilding(simulation, selectedBuildingId);
     if (!building) return;
 
     const key = button.dataset.upgrade;
-    const result = purchaseUpgrade(simulation, simulation.localPlayerSlot, building.id, key);
-    if (result.ok) {
+    const definition = UPGRADE_DEFINITIONS[key];
+    const attempts = event.shiftKey && definition.max > 1 ? 5 : 1;
+    let result = null;
+    let lastSuccess = null;
+    let bought = 0;
+    let spent = 0;
+    for (let index = 0; index < attempts; index += 1) {
+      const next = purchaseUpgrade(simulation, simulation.localPlayerSlot, building.id, key);
+      result = next;
+      if (!next.ok) break;
+      lastSuccess = next;
+      bought += 1;
+      spent += next.cost;
+    }
+    if (bought > 0) {
       playUiCue('upgrade');
-      const definition = UPGRADE_DEFINITIONS[key];
-      transientStatus = `${definition.label} 업그레이드 완료 · 현재 ${result.level}/${definition.max} · -${result.cost} 미네랄`;
+      transientStatus = `${definition.label} +${bought}단계 · 현재 ${lastSuccess.level}/${definition.max} · -${spent} 미네랄`;
       transientStatusMs = 1500;
     } else {
       const reasons = {
@@ -895,8 +936,96 @@ document.querySelector('#helpToggleButton')?.addEventListener('click', (event) =
 document.querySelector('#restartMatchButton')?.addEventListener('click', () => window.location.reload());
 document.querySelector('#backLobbyButton')?.addEventListener('click', () => { window.location.href = '/'; });
 
+function selectOwnedUnitType(type) {
+  selectedBuildingId = null;
+  selectedSunkenZoneId = null;
+  selectedIds.clear();
+  for (const unit of simulation.units) {
+    if (unit.hp > 0 && unit.ownerSlot === simulation.localPlayerSlot && unit.type === type) {
+      selectedIds.add(unit.id);
+    }
+  }
+  if (selectedIds.size > 0) playUiCue('select');
+  transientStatus = selectedIds.size > 0
+    ? `${type === 'hydra' ? '히드라' : type === 'overlord' ? '오버로드' : '비콘 질럿'} ${selectedIds.size}기 빠른 선택`
+    : '선택할 유닛이 없습니다.';
+  transientStatusMs = 900;
+  updateHud();
+  updateBuildingHud();
+  updateReadabilitySelectionUi();
+}
+
+function selectOwnedBuildingType(type) {
+  const building = (simulation.upgradeBuildings ?? []).find(
+    (candidate) => candidate.ownerSlot === simulation.localPlayerSlot
+      && candidate.type === type
+      && candidate.hp > 0,
+  );
+  if (!building) {
+    transientStatus = '선택할 업그레이드 건물이 없습니다.';
+    transientStatusMs = 900;
+    return;
+  }
+  selectedIds.clear();
+  selectedSunkenZoneId = null;
+  selectedBuildingId = building.id;
+  transientStatus = `${building.label} 빠른 선택`;
+  transientStatusMs = 900;
+  updateHud();
+  updateBuildingHud();
+  updateReadabilitySelectionUi();
+}
+
+function centerCameraOnSelection() {
+  const units = simulation.units.filter((unit) => selectedIds.has(unit.id) && unit.hp > 0);
+  let focus = null;
+  if (units.length > 0) {
+    const center = units.reduce((sum, unit) => ({ x: sum.x + unit.x, y: sum.y + unit.y }), { x: 0, y: 0 });
+    focus = { x: center.x / units.length, y: center.y / units.length };
+  } else {
+    const building = getUpgradeBuilding(simulation, selectedBuildingId);
+    if (building?.hp > 0) focus = building;
+  }
+  if (!focus) return false;
+  camera.x = focus.x - viewportWidth / 2;
+  camera.y = focus.y - viewportHeight / 2;
+  clampCamera(camera, map, viewportWidth, viewportHeight);
+  render(true);
+  return true;
+}
+
 window.addEventListener('resize', resizeCanvas);
 window.addEventListener('keydown', (event) => {
+  if (!event.repeat && event.code === 'Digit1') {
+    selectOwnedUnitType('hydra');
+    event.preventDefault();
+    return;
+  }
+  if (!event.repeat && event.code === 'Digit2') {
+    selectOwnedUnitType('overlord');
+    event.preventDefault();
+    return;
+  }
+  if (!event.repeat && event.code === 'Digit3') {
+    selectOwnedUnitType('zealot');
+    event.preventDefault();
+    return;
+  }
+  if (!event.repeat && event.code === 'Digit4') {
+    selectOwnedBuildingType('hydra-den');
+    event.preventDefault();
+    return;
+  }
+  if (!event.repeat && event.code === 'Digit5') {
+    selectOwnedBuildingType('evolution');
+    event.preventDefault();
+    return;
+  }
+  if (event.code === 'Space') {
+    centerCameraOnSelection();
+    event.preventDefault();
+    return;
+  }
   if (event.code === 'KeyH') {
     centerCameraOnLocalHome();
     render(true);

@@ -35,3 +35,15 @@ test('classic mode shares the detailed RTS terrain and unit renderer', async () 
     /ctx\.drawImage\(fogCanvas, 0, 0, viewportWidth, viewportHeight\)/,
   );
 });
+
+test('classic controls expose fast RTS selection and responsive attack-move feedback', async () => {
+  const classic = await readFile(classicUrl, 'utf8');
+  assert.match(classic, /event\.code === 'Digit1'/);
+  assert.match(classic, /event\.code === 'Digit2'/);
+  assert.match(classic, /event\.code === 'Digit3'/);
+  assert.match(classic, /event\.code === 'Digit4'/);
+  assert.match(classic, /event\.code === 'Digit5'/);
+  assert.match(classic, /event\.code === 'Space'/);
+  assert.match(classic, /orderType: 'attack-move'/);
+  assert.match(classic, /function drawMoveMarker\(\)/);
+});

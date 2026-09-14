@@ -30,7 +30,7 @@ import {
 
 export const HYDRA_SPAWN_INTERVAL_MS = RULE_HYDRA_SPAWN_INTERVAL_MS;
 export const HYDRA_HP = 40;
-export const HYDRA_SPEED = 112;
+export const HYDRA_SPEED = 124;
 export const HYDRA_SPEED_UPGRADE_MULTIPLIER = 1.25;
 export const HYDRA_VISION_RADIUS = 176;
 export const SUNKEN_VISION_RADIUS = 240;
@@ -38,7 +38,7 @@ export const OVERLORD_VISION_RADIUS = 280;
 export const MAX_LOCAL_HYDRAS_PER_ZONE = RULE_MAX_LOCAL_HYDRAS_PER_ZONE;
 export const VISION_CLUSTER_SIZE = 160;
 export const LARGE_ORDER_UNIT_THRESHOLD = 32;
-export const PATH_GROUP_WORLD_SIZE = 64;
+export const PATH_GROUP_WORLD_SIZE = 96;
 
 function distanceSquared(a, b) {
   const dx = a.x - b.x;
@@ -288,6 +288,9 @@ export function assignMoveOrders(map, state, unitIds, targetWorld, { orderType =
   const centerX = center.x / selected.length;
   const centerY = center.y / selected.length;
   const heading = Math.atan2(targetWorld.y - centerY, targetWorld.x - centerX);
+  const useLargeArmyPathCache = hydras.length >= LARGE_ORDER_UNIT_THRESHOLD;
+  const centralTarget = nearestWalkablePoint(map, targetWorld.x, targetWorld.y, 64);
+  const largeArmyPathCache = new Map();
   let hydraIndex = 0;
 
   for (const unit of selected) {
@@ -327,7 +330,18 @@ export function assignMoveOrders(map, state, unitIds, targetWorld, { orderType =
     const snappedTarget = nearestWalkablePoint(map, desiredTarget.x, desiredTarget.y, 64);
     if (!snappedTarget) continue;
 
-    let path = findPath(map, { x: unit.x, y: unit.y }, snappedTarget);
+    let path;
+    if (unit.type === 'hydra' && useLargeArmyPathCache && centralTarget) {
+      const cacheKey = `${Math.floor(unit.x / PATH_GROUP_WORLD_SIZE)},${Math.floor(unit.y / PATH_GROUP_WORLD_SIZE)}`;
+      path = largeArmyPathCache.get(cacheKey);
+      if (!path) {
+        path = findPath(map, { x: unit.x, y: unit.y }, centralTarget);
+        if (path?.length) largeArmyPathCache.set(cacheKey, path);
+      }
+      if (path?.length) path = path.map((point) => ({ x: point.x, y: point.y }));
+    } else {
+      path = findPath(map, { x: unit.x, y: unit.y }, snappedTarget);
+    }
     if (!path || path.length === 0) continue;
     path = applyLaneOffsetToPath(map, path, unit, offset, snappedTarget);
 
